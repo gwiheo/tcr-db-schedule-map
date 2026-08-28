@@ -315,6 +315,11 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
                   transform={`translate(${n.x} ${n.y})`}
                   className="cursor-pointer"
                   opacity={related ? 1 : 0.28}
+                  {...(task
+                    ? {
+                        title: `${task.title} · ${CELL_LABEL[status ?? "planned"]} · ${taskProgress(task)}%`,
+                      }
+                    : {})}
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelect(selected ? null : n.id);
@@ -369,11 +374,6 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
                       >
                         {n.label}
                       </text>
-                      {task ? (
-                        <title>
-                          {task.title} · {CELL_LABEL[status ?? "planned"]} · {taskProgress(task)}%
-                        </title>
-                      ) : null}
                       {status === "done" ? <circle cx={n.w - 12} cy={10} r={4} fill={n.color} /> : null}
                       {n.hasChildren ? (
                         <g
