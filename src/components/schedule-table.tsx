@@ -1,9 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   CELL_LABEL,
   MILESTONES,
@@ -307,11 +306,11 @@ function StreamRows({
                 selected && "bg-amber-50",
               )}
             >
-              <div className="flex items-start gap-1">
+              <div className="flex flex-col gap-1">
                 <button
                   type="button"
                   data-testid={`task-open-${task.id}`}
-                  className="min-w-0 flex-1 text-left"
+                  className="w-full text-left"
                   onClick={() => onSelectTask(task.id)}
                 >
                   <div className="font-medium leading-5 underline-offset-2 group-hover:underline">{task.title}</div>
@@ -320,27 +319,23 @@ function StreamRows({
                     <div className="h-full rounded-full" style={{ width: `${taskProgress(task)}%`, backgroundColor: color }} />
                   </div>
                 </button>
-                <div className="flex shrink-0 flex-col">
-                  <Button
-                    size="icon-xs"
-                    variant="ghost"
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
                     data-testid={`insert-task-${task.id}`}
-                    aria-label={`${task.title} 아래에 업무 삽입`}
-                    title="아래에 업무 삽입"
+                    className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900"
                     onClick={() => onAddTask(streamId, task.id)}
                   >
-                    <Plus />
-                  </Button>
-                  <Button
-                    size="icon-xs"
-                    variant="ghost"
+                    삽입
+                  </button>
+                  <button
+                    type="button"
                     data-testid={`delete-task-${task.id}`}
-                    aria-label={`${task.title} 삭제`}
-                    title="이 업무 삭제"
+                    className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-rose-700 hover:bg-rose-50"
                     onClick={() => handleDelete(task)}
                   >
-                    <Trash2 />
-                  </Button>
+                    삭제
+                  </button>
                 </div>
               </div>
             </td>
