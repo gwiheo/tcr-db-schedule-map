@@ -285,7 +285,7 @@ function StreamRows({
                     data-testid={`week-cell-${task.id}-${week.index}`}
                     title={`${task.title} · ${week.rangeLabel} · ${CELL_LABEL[statusCell]} — 클릭하여 변경`}
                     aria-label={`${task.title} ${week.rangeLabel} ${CELL_LABEL[statusCell]}`}
-                    className={cn("mx-auto flex items-center justify-center", visual.className)}
+                    className={cn("mx-auto flex cursor-pointer items-center justify-center hover:brightness-95", visual.className)}
                     style={visual.style}
                     onClick={() => onCycleCell(task.id, week.index)}
                   >

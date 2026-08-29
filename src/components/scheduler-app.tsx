@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
+  BASELINE_TASKS,
   CELL_LABEL,
   MIND_TREE,
   STATUS_LABEL,
   STREAMS,
+  STREAM_MAP,
   cellOf,
   descendantTaskIds,
   findNode,
@@ -21,14 +23,7 @@ import {
   taskProgress,
   taskStatus,
 } from "@/lib/schedule-data";
-import {
-  commitTasks,
-  getClientError,
-  getClientTasks,
-  getServerTasks,
-  resetTasks,
-  subscribeTasks,
-} from "@/lib/storage";
+import { clearStoredTasks, commitTasks, getClientError, getClientTasks, getServerTasks, subscribeTasks } from "@/lib/storage";
 import type { CellStatus, Task } from "@/lib/types";
 import { currentWeekIndex, WEEKS } from "@/lib/weeks";
 import { cn } from "@/lib/utils";
@@ -42,21 +37,30 @@ export function SchedulerApp() {
   const nowWeek = currentWeekIndex();
 
   const selectedNode = selectedNodeId ? findNode(MIND_TREE, selectedNodeId) : null;
+  const selectedStreamId =
+    selectedNodeId?.startsWith("stream-") ? selectedNodeId.slice("stream-".length) : selectedNode?.streamId;
+
   const highlightedTaskIds = useMemo(() => {
     if (!selectedNode || selectedNode.id === "root") return new Set<string>();
-    return new Set(descendantTaskIds(selectedNode));
-  }, [selectedNode]);
+    const ids = descendantTaskIds(selectedNode);
+    if (ids.length === 0 && selectedStreamId) {
+      return new Set(tasks.filter((t) => t.streamId === selectedStreamId).map((t) => t.id));
+    }
+    return new Set(ids);
+  }, [selectedNode, selectedStreamId, tasks]);
 
   const visibleTasks = useMemo(() => {
     let list = tasks;
-    if (highlightedTaskIds.size > 0) {
+    if (selectedStreamId) {
+      list = list.filter((t) => t.streamId === selectedStreamId);
+    } else if (highlightedTaskIds.size > 0) {
       list = list.filter((t) => highlightedTaskIds.has(t.id));
     }
     if (thisWeekOnly) {
       list = list.filter((t) => cellOf(t, nowWeek) !== "empty");
     }
     return list;
-  }, [tasks, highlightedTaskIds, thisWeekOnly, nowWeek]);
+  }, [tasks, selectedStreamId, highlightedTaskIds, thisWeekOnly, nowWeek]);
 
   const stats = useMemo(() => {
     const counts = { planned: 0, active: 0, done: 0, blocked: 0 };
@@ -73,6 +77,8 @@ export function SchedulerApp() {
 
   const currentWeek = WEEKS[nowWeek];
   const thisWeekTasks = tasks.filter((t) => cellOf(t, nowWeek) !== "empty");
+  const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
+  const activeStream = selectedStreamId ? STREAM_MAP[selectedStreamId] : null;
 
   function patchTask(id: string, updater: (task: Task) => Task) {
     commitTasks(tasks.map((t) => (t.id === id ? updater(t) : t)));
@@ -105,12 +111,23 @@ export function SchedulerApp() {
   }
 
   function resetPlan() {
-    resetTasks();
+    clearStoredTasks();
+    commitTasks(structuredClone(BASELINE_TASKS));
     setSelectedNodeId(null);
     setSelectedTaskId(null);
   }
 
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
+  const detail = selectedTask ? (
+    <TaskDetailPanel
+      task={selectedTask}
+      currentWeek={nowWeek}
+      onClose={() => setSelectedTaskId(null)}
+      onChangeNotes={(notes) => patchTask(selectedTask.id, (t) => ({ ...t, notes }))}
+      onChangeOwner={(owner) => patchTask(selectedTask.id, (t) => ({ ...t, owner }))}
+      onSetCell={(week, status) => setCell(selectedTask.id, week, status)}
+      onMarkAll={(status) => markAll(selectedTask.id, status)}
+    />
+  ) : null;
 
   return (
     <TooltipProvider>
@@ -183,12 +200,6 @@ export function SchedulerApp() {
                 const node = id ? findNode(MIND_TREE, id) : null;
                 if (node?.taskId) {
                   setSelectedTaskId(node.taskId);
-                  requestAnimationFrame(() => {
-                    document.getElementById(`task-row-${node.taskId}`)?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "center",
-                    });
-                  });
                 }
               }}
             />
@@ -201,29 +212,47 @@ export function SchedulerApp() {
               >
                 전체
               </Button>
-              {STREAMS.map((stream) => (
-                <Button
-                  key={stream.id}
-                  size="sm"
-                  variant={selectedNodeId === `stream-${stream.id}` ? "default" : "outline"}
-                  data-testid={`filter-${stream.id}`}
-                  onClick={() => setSelectedNodeId(`stream-${stream.id}`)}
-                  style={
-                    selectedNodeId === `stream-${stream.id}`
-                      ? { backgroundColor: stream.color, borderColor: stream.color, color: "white" }
-                      : { borderColor: stream.color, color: stream.color }
-                  }
-                >
-                  {stream.shortTitle}
-                </Button>
-              ))}
+              {STREAMS.map((stream) => {
+                const active = selectedNodeId === `stream-${stream.id}`;
+                return (
+                  <Button
+                    key={stream.id}
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    data-testid={`filter-${stream.id}`}
+                    onClick={() => setSelectedNodeId(`stream-${stream.id}`)}
+                    style={
+                      active
+                        ? { backgroundColor: stream.color, borderColor: stream.color, color: "white" }
+                        : { borderColor: stream.color, color: stream.color }
+                    }
+                  >
+                    {stream.shortTitle}
+                  </Button>
+                );
+              })}
             </div>
           </section>
 
-          <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+          {detail ? (
+            <section className="rounded-xl border bg-card p-4 shadow-sm">{detail}</section>
+          ) : null}
+
+          <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-sm font-semibold">주간 스케줄 테이블 · 8월–12월</h2>
+                <div>
+                  <h2 className="text-sm font-semibold">주간 스케줄 테이블 · 8월–12월</h2>
+                  {activeStream ? (
+                    <p className="text-xs font-medium" style={{ color: activeStream.color }}>
+                      {activeStream.title}만 표시 · {visibleTasks.length}개 업무
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      칸을 누르면 예정 → 진행 → 완료 → 지연. 업무 이름 아래 「상세 보기」로 메모를 엽니다.
+                    </p>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
@@ -239,9 +268,6 @@ export function SchedulerApp() {
                   </Button>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                칸을 클릭하면 예정 → 진행 → 완료 → 지연 순으로 바뀝니다. 업무 이름을 누르면 상세를 엽니다.
-              </p>
               <ScheduleTable
                 tasks={visibleTasks}
                 currentWeek={nowWeek}
@@ -251,24 +277,12 @@ export function SchedulerApp() {
                 emptyMessage={
                   thisWeekOnly
                     ? "이번 주에 잡혀 있는 업무가 없습니다."
-                    : "선택한 마인드맵 노드에 연결된 일정이 없습니다."
+                    : "선택한 영역에 연결된 일정이 없습니다."
                 }
               />
             </div>
 
-            <aside className={cn("rounded-xl border bg-card p-4", selectedTask && "order-first lg:order-none")}>
-              {selectedTask ? (
-                <TaskDetailPanel
-                  task={selectedTask}
-                  currentWeek={nowWeek}
-                  onClose={() => setSelectedTaskId(null)}
-                  onChangeNotes={(notes) => patchTask(selectedTask.id, (t) => ({ ...t, notes }))}
-                  onChangeOwner={(owner) => patchTask(selectedTask.id, (t) => ({ ...t, owner }))}
-                  onSetCell={(week, status) => setCell(selectedTask.id, week, status)}
-                  onMarkAll={(status) => markAll(selectedTask.id, status)}
-                />
-              ) : (
-                <>
+            <aside className="rounded-xl border bg-card p-4">
               <h2 className="text-sm font-semibold">이번 주 보드</h2>
               <p className="mt-1 text-xs text-muted-foreground">
                 {currentWeek ? `${currentWeek.rangeLabel}에 칸이 있는 업무` : "현재 주가 계획 구간 밖입니다."}
@@ -309,8 +323,6 @@ export function SchedulerApp() {
                 <LegendDot color="#0f766e" solid label="완료" />
                 <LegendDot color="#e11d48" solid label="지연" />
               </div>
-                </>
-              )}
             </aside>
           </section>
         </main>

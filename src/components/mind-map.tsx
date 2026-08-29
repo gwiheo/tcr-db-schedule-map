@@ -261,7 +261,7 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
       </p>
       <div
         ref={viewportRef}
-        className="relative h-[min(58vh,640px)] w-full cursor-grab touch-none overflow-hidden active:cursor-grabbing"
+        className="relative h-[min(44vh,480px)] w-full cursor-grab touch-none overflow-hidden active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={() => {
