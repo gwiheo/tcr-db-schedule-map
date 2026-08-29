@@ -1,7 +1,9 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { Plus, Trash2 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import {
   CELL_LABEL,
   MILESTONES,
@@ -68,7 +70,10 @@ type ScheduleTableProps = {
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
   onCycleCell: (taskId: string, week: number) => void;
+  onAddTask: (streamId: string, afterId?: string) => void;
+  onDeleteTask: (id: string) => void;
   showEmptyStreams?: boolean;
+  emptyStreamHint?: string;
   emptyMessage?: string;
 };
 
@@ -79,7 +84,10 @@ export function ScheduleTable({
   selectedTaskId,
   onSelectTask,
   onCycleCell,
+  onAddTask,
+  onDeleteTask,
   showEmptyStreams = false,
+  emptyStreamHint,
   emptyMessage,
 }: ScheduleTableProps) {
   const streamMap = streamMapOf(streams);
@@ -202,6 +210,9 @@ export function ScheduleTable({
                   selectedTaskId={selectedTaskId}
                   onSelectTask={onSelectTask}
                   onCycleCell={onCycleCell}
+                  onAddTask={onAddTask}
+                  onDeleteTask={onDeleteTask}
+                  emptyStreamHint={emptyStreamHint}
                 />
               );
             })
@@ -213,6 +224,7 @@ export function ScheduleTable({
 }
 
 function StreamRows({
+  streamId,
   streamTitle,
   color,
   tasks,
@@ -220,6 +232,9 @@ function StreamRows({
   selectedTaskId,
   onSelectTask,
   onCycleCell,
+  onAddTask,
+  onDeleteTask,
+  emptyStreamHint,
 }: {
   streamId: string;
   streamTitle: string;
@@ -229,9 +244,18 @@ function StreamRows({
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
   onCycleCell: (taskId: string, week: number) => void;
+  onAddTask: (streamId: string, afterId?: string) => void;
+  onDeleteTask: (id: string) => void;
+  emptyStreamHint?: string;
 }) {
   const avg =
     tasks.length === 0 ? 0 : Math.round(tasks.reduce((s, t) => s + taskProgress(t), 0) / tasks.length);
+
+  function handleDelete(task: Task) {
+    if (!window.confirm(`「${task.title}」을 삭제할까요?`)) return;
+    onDeleteTask(task.id);
+  }
+
   return (
     <>
       <tr>
@@ -240,16 +264,29 @@ function StreamRows({
           className="border-b px-3 py-1.5 text-xs font-semibold tracking-wide text-white"
           style={{ backgroundColor: color }}
         >
-          {streamTitle}
-          <span className="ml-2 font-normal opacity-80">
-            {tasks.length === 0 ? "업무 없음" : `평균 ${avg}%`}
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span>
+              {streamTitle}
+              <span className="ml-2 font-normal opacity-80">
+                {tasks.length === 0 ? "업무 없음" : `${tasks.length}개 · 평균 ${avg}%`}
+              </span>
+            </span>
+            <button
+              type="button"
+              data-testid={`add-task-${streamId}`}
+              className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-white/20 px-2 text-[11px] font-medium hover:bg-white/30"
+              onClick={() => onAddTask(streamId)}
+            >
+              <Plus className="size-3" />
+              업무 추가
+            </button>
+          </div>
         </td>
       </tr>
       {tasks.length === 0 ? (
         <tr>
           <td colSpan={3 + WEEKS.length} className="border-b px-3 py-3 text-xs text-muted-foreground">
-            이 영역에 아직 업무가 없습니다. 이름만 잡아 두고 이후 일정을 채우면 됩니다.
+            {emptyStreamHint ?? "이 영역에 아직 업무가 없습니다. 「업무 추가」로 행을 넣으세요."}
           </td>
         </tr>
       ) : null}
@@ -268,18 +305,42 @@ function StreamRows({
                 selected && "bg-amber-50",
               )}
             >
-              <button
-                type="button"
-                data-testid={`task-open-${task.id}`}
-                className="block w-full text-left"
-                onClick={() => onSelectTask(task.id)}
-              >
-                <div className="font-medium leading-5 underline-offset-2 group-hover:underline">{task.title}</div>
-                <div className="text-[11px] text-muted-foreground">상세 보기</div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-200">
-                  <div className="h-full rounded-full" style={{ width: `${taskProgress(task)}%`, backgroundColor: color }} />
+              <div className="flex items-start gap-1">
+                <button
+                  type="button"
+                  data-testid={`task-open-${task.id}`}
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => onSelectTask(task.id)}
+                >
+                  <div className="font-medium leading-5 underline-offset-2 group-hover:underline">{task.title}</div>
+                  <div className="text-[11px] text-muted-foreground">상세 보기</div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-200">
+                    <div className="h-full rounded-full" style={{ width: `${taskProgress(task)}%`, backgroundColor: color }} />
+                  </div>
+                </button>
+                <div className="flex shrink-0 flex-col">
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    data-testid={`insert-task-${task.id}`}
+                    aria-label={`${task.title} 아래에 업무 삽입`}
+                    title="아래에 업무 삽입"
+                    onClick={() => onAddTask(streamId, task.id)}
+                  >
+                    <Plus />
+                  </Button>
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    data-testid={`delete-task-${task.id}`}
+                    aria-label={`${task.title} 삭제`}
+                    title="이 업무 삭제"
+                    onClick={() => handleDelete(task)}
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
-              </button>
+              </div>
             </td>
             <td
               className={cn(

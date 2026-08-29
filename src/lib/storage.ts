@@ -1,5 +1,6 @@
-import { BASELINE_ROOT_LABEL, BASELINE_STREAMS, BASELINE_TASKS } from "./schedule-data";
+import { BASELINE_ROOT_LABEL, BASELINE_STREAMS, BASELINE_TASKS, seedWeekStatus } from "./schedule-data";
 import type { BranchSide, PersistedState, SavedSchedule, ScheduleLibrary, Stream, StoreState, Task } from "./types";
+import { WEEKS, currentWeekIndex } from "./weeks";
 
 const WORK_KEY = "tcr-db-engine-schedule-v1";
 const LIBRARY_KEY = "tcr-db-engine-library-v1";
@@ -97,12 +98,8 @@ function mergeSaved(savedList: Task[] | undefined, streams: Stream[]): Task[] {
     });
   }
 
-  for (const base of BASELINE_TASKS) {
-    if (seen.has(base.id) || !streamIds.has(base.streamId)) continue;
-    seen.add(base.id);
-    out.push(structuredClone(base));
-  }
-
+  // Do not re-inject missing baseline tasks: deleted rows must stay gone, and
+  // user-added rows are already in the saved list.
   return out;
 }
 
@@ -316,6 +313,60 @@ export function deleteStream(id: string): boolean {
     tasks: current.tasks.filter((t) => t.streamId !== id),
     dirty: true,
   });
+  return true;
+}
+
+function defaultTaskSpan() {
+  const now = currentWeekIndex();
+  const last = WEEKS.length - 1;
+  const startWeek = now < 0 ? 0 : now > last ? last : now;
+  return { startWeek, endWeek: Math.min(startWeek + 3, last) };
+}
+
+function insertTaskInList(tasks: Task[], task: Task, afterId?: string) {
+  const next = [...tasks];
+  if (afterId) {
+    const idx = next.findIndex((t) => t.id === afterId);
+    if (idx >= 0) {
+      next.splice(idx + 1, 0, task);
+      return next;
+    }
+  }
+  let last = -1;
+  for (let i = 0; i < next.length; i++) {
+    if (next[i].streamId === task.streamId) last = i;
+  }
+  if (last >= 0) next.splice(last + 1, 0, task);
+  else next.push(task);
+  return next;
+}
+
+export function addTask(streamId: string, afterId?: string): Task | null {
+  const current = getStoreState();
+  if (!current.streams.some((s) => s.id === streamId)) return null;
+  const { startWeek, endWeek } = defaultTaskSpan();
+  const task: Task = {
+    id: newId(),
+    title: uniqueLabel(
+      current.tasks.filter((t) => t.streamId === streamId).map((t) => t.title),
+      "새 업무",
+    ),
+    summary: "",
+    streamId,
+    owner: "",
+    startWeek,
+    endWeek,
+    notes: "",
+    weekStatus: seedWeekStatus(startWeek, endWeek, "planned", startWeek),
+  };
+  commit({ tasks: insertTaskInList(current.tasks, task, afterId), dirty: true });
+  return task;
+}
+
+export function deleteTask(id: string): boolean {
+  const current = getStoreState();
+  if (!current.tasks.some((t) => t.id === id)) return false;
+  commit({ tasks: current.tasks.filter((t) => t.id !== id), dirty: true });
   return true;
 }
 

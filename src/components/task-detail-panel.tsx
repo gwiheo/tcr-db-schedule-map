@@ -16,6 +16,7 @@ type TaskDetailPanelProps = {
   onChangeOwner: (owner: string) => void;
   onSetCell: (week: number, status: CellStatus) => void;
   onMarkAll: (status: CellStatus) => void;
+  onDelete: () => void;
 };
 
 export function TaskDetailPanel({
@@ -28,6 +29,7 @@ export function TaskDetailPanel({
   onChangeOwner,
   onSetCell,
   onMarkAll,
+  onDelete,
 }: TaskDetailPanelProps) {
   const stream = streamMapOf(streams)[task.streamId];
   const status = taskStatus(task);
@@ -120,6 +122,9 @@ export function TaskDetailPanel({
         </Button>
         <Button size="sm" variant="outline" onClick={() => onMarkAll("blocked")}>
           현재 주 지연
+        </Button>
+        <Button size="sm" variant="destructive" data-testid="delete-task-detail" onClick={onDelete}>
+          이 업무 삭제
         </Button>
       </div>
     </div>

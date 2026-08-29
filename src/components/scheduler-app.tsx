@@ -25,8 +25,10 @@ import {
 } from "@/lib/schedule-data";
 import {
   addStream,
+  addTask,
   deleteSchedule,
   deleteStream,
+  deleteTask,
   exportPayload,
   getServerState,
   getStoreState,
@@ -202,6 +204,14 @@ export function SchedulerApp() {
       onChangeOwner={(owner) => patchTask(selectedTask.id, (t) => ({ ...t, owner }))}
       onSetCell={(week, status) => setCell(selectedTask.id, week, status)}
       onMarkAll={(status) => markAll(selectedTask.id, status)}
+      onDelete={() => {
+        if (!window.confirm(`「${selectedTask.title}」을 삭제할까요?`)) return;
+        const title = selectedTask.title;
+        if (deleteTask(selectedTask.id)) {
+          setSelectedTaskId(null);
+          setNotice(`「${title}」을 삭제했습니다.`);
+        }
+      }}
     />
   ) : null;
 
@@ -403,7 +413,8 @@ export function SchedulerApp() {
                     </p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      칸을 누르면 예정 → 진행 → 완료 → 지연. 업무 이름 아래 「상세 보기」로 메모를 엽니다.
+                      칸을 누르면 예정 → 진행 → 완료 → 지연. 영역 헤더의 「업무 추가」로 행을 넣고, 업무 옆 + / 휴지통으로
+                      삽입·삭제합니다.
                     </p>
                   )}
                 </div>
@@ -424,12 +435,36 @@ export function SchedulerApp() {
               </div>
               <ScheduleTable
                 tasks={visibleTasks}
-                streams={streams}
+                streams={selectedStreamId ? streams.filter((s) => s.id === selectedStreamId) : streams}
                 currentWeek={nowWeek}
                 selectedTaskId={selectedTaskId}
                 onSelectTask={setSelectedTaskId}
                 onCycleCell={cycleCell}
-                showEmptyStreams={!selectedStreamId && !thisWeekOnly}
+                onAddTask={(streamId, afterId) => {
+                  const task = addTask(streamId, afterId);
+                  if (!task) return;
+                  setSelectedTaskId(task.id);
+                  setNotice(
+                    afterId
+                      ? `「${task.title}」을 아래에 삽입했습니다. 제목을 바꾼 뒤 저장해 두세요.`
+                      : `「${task.title}」을 추가했습니다. 제목을 바꾼 뒤 저장해 두세요.`,
+                  );
+                  requestAnimationFrame(() => {
+                    document.getElementById(`task-row-${task.id}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+                  });
+                }}
+                onDeleteTask={(id) => {
+                  const task = tasks.find((t) => t.id === id);
+                  if (!deleteTask(id)) return;
+                  if (selectedTaskId === id) setSelectedTaskId(null);
+                  setNotice(`「${task?.title ?? "업무"}」을 삭제했습니다.`);
+                }}
+                showEmptyStreams={!thisWeekOnly || Boolean(selectedStreamId)}
+                emptyStreamHint={
+                  thisWeekOnly
+                    ? "이번 주에 칸이 있는 업무가 없습니다. 「업무 추가」로 이번 주부터 새 행을 넣을 수 있습니다."
+                    : undefined
+                }
                 emptyMessage={
                   thisWeekOnly
                     ? "이번 주에 잡혀 있는 업무가 없습니다."
