@@ -204,31 +204,36 @@ export function SchedulerApp() {
               }}
             />
             <div className="flex flex-wrap gap-1.5">
-              <Button
-                size="sm"
-                variant={!selectedNodeId || selectedNodeId === "root" ? "default" : "outline"}
+              <button
+                type="button"
                 data-testid="filter-all"
+                className={cn(
+                  "h-7 rounded-lg border px-2.5 text-[0.8rem] font-medium",
+                  !selectedNodeId || selectedNodeId === "root"
+                    ? "border-stone-800 bg-stone-800 text-white"
+                    : "border-stone-300 bg-white",
+                )}
                 onClick={() => setSelectedNodeId(null)}
               >
                 전체
-              </Button>
+              </button>
               {STREAMS.map((stream) => {
                 const active = selectedNodeId === `stream-${stream.id}`;
                 return (
-                  <Button
+                  <button
                     key={stream.id}
-                    size="sm"
-                    variant={active ? "default" : "outline"}
+                    type="button"
                     data-testid={`filter-${stream.id}`}
-                    onClick={() => setSelectedNodeId(`stream-${stream.id}`)}
+                    className="h-7 rounded-lg border px-2.5 text-[0.8rem] font-medium"
                     style={
                       active
                         ? { backgroundColor: stream.color, borderColor: stream.color, color: "white" }
-                        : { borderColor: stream.color, color: stream.color }
+                        : { borderColor: stream.color, color: stream.color, backgroundColor: "white" }
                     }
+                    onClick={() => setSelectedNodeId(`stream-${stream.id}`)}
                   >
                     {stream.shortTitle}
-                  </Button>
+                  </button>
                 );
               })}
             </div>
