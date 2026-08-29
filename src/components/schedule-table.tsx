@@ -6,12 +6,12 @@ import {
   CELL_LABEL,
   MILESTONES,
   STATUS_LABEL,
-  STREAM_MAP,
   cellOf,
+  streamMapOf,
   taskProgress,
   taskStatus,
 } from "@/lib/schedule-data";
-import type { CellStatus, Task } from "@/lib/types";
+import type { CellStatus, Stream, Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { monthGroups, WEEKS } from "@/lib/weeks";
 
@@ -63,6 +63,7 @@ function cellMark(status: CellStatus) {
 
 type ScheduleTableProps = {
   tasks: Task[];
+  streams: Stream[];
   currentWeek: number;
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
@@ -72,12 +73,14 @@ type ScheduleTableProps = {
 
 export function ScheduleTable({
   tasks,
+  streams,
   currentWeek,
   selectedTaskId,
   onSelectTask,
   onCycleCell,
   emptyMessage,
 }: ScheduleTableProps) {
+  const streamMap = streamMapOf(streams);
   const byStream = new Map<string, Task[]>();
   for (const task of tasks) {
     const list = byStream.get(task.streamId) ?? [];
@@ -172,7 +175,7 @@ export function ScheduleTable({
             </tr>
           ) : (
             [...byStream.entries()].map(([streamId, streamTasks]) => {
-              const stream = STREAM_MAP[streamId];
+              const stream = streamMap[streamId];
               return (
                 <StreamRows
                   key={streamId}

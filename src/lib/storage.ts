@@ -1,5 +1,5 @@
-import { BASELINE_TASKS } from "./schedule-data";
-import type { PersistedState, SavedSchedule, ScheduleLibrary, StoreState, Task } from "./types";
+import { BASELINE_ROOT_LABEL, BASELINE_STREAMS, BASELINE_TASKS } from "./schedule-data";
+import type { PersistedState, SavedSchedule, ScheduleLibrary, Stream, StoreState, Task } from "./types";
 
 const WORK_KEY = "tcr-db-engine-schedule-v1";
 const LIBRARY_KEY = "tcr-db-engine-library-v1";
@@ -16,7 +16,7 @@ function isTask(value: unknown): value is Task {
   );
 }
 
-/** Keeps saved progress while picking up title/summary edits shipped in newer baselines. */
+/** Keeps saved edits (including renamed titles) while filling gaps from the baseline plan. */
 function mergeSaved(savedList: Task[]): Task[] {
   const saved = new Map(savedList.filter(isTask).map((t) => [t.id, t]));
   return BASELINE_TASKS.map((base) => {
@@ -26,14 +26,32 @@ function mergeSaved(savedList: Task[]): Task[] {
       ...base,
       ...prev,
       id: base.id,
-      title: base.title,
-      summary: base.summary,
+      title: prev.title?.trim() || base.title,
+      summary: prev.summary ?? base.summary,
       streamId: base.streamId,
       startWeek: prev.startWeek,
       endWeek: prev.endWeek,
       owner: prev.owner || base.owner,
       notes: prev.notes ?? base.notes,
       weekStatus: { ...base.weekStatus, ...prev.weekStatus },
+    };
+  });
+}
+
+function mergeStreams(savedList: Stream[] | undefined): Stream[] {
+  if (!Array.isArray(savedList)) return structuredClone(BASELINE_STREAMS);
+  const saved = new Map(
+    savedList.filter((s) => s && typeof s === "object" && typeof s.id === "string").map((s) => [s.id, s]),
+  );
+  return BASELINE_STREAMS.map((base) => {
+    const prev = saved.get(base.id);
+    if (!prev) return structuredClone(base);
+    return {
+      ...base,
+      title: prev.title?.trim() || base.title,
+      shortTitle: prev.shortTitle?.trim() || base.shortTitle,
+      color: /^#[0-9a-fA-F]{6}$/.test(prev.color ?? "") ? prev.color : base.color,
+      side: prev.side === "left" || prev.side === "right" ? prev.side : base.side,
     };
   });
 }
@@ -59,6 +77,8 @@ function readLibrary(): SavedSchedule[] {
       ...s,
       savedAt: s.savedAt ?? new Date().toISOString(),
       tasks: mergeSaved(s.tasks),
+      streams: mergeStreams(s.streams),
+      rootLabel: s.rootLabel?.trim() || BASELINE_ROOT_LABEL,
     }));
   } catch {
     return [];
@@ -70,9 +90,11 @@ function writeLibrary(snapshots: SavedSchedule[]) {
   localStorage.setItem(LIBRARY_KEY, JSON.stringify(payload));
 }
 
-function readWorkingCopy(): { state: Omit<StoreState, "snapshots">; } {
+function readWorkingCopy(): { state: Omit<StoreState, "snapshots"> } {
   const empty = {
     tasks: structuredClone(BASELINE_TASKS),
+    streams: structuredClone(BASELINE_STREAMS),
+    rootLabel: BASELINE_ROOT_LABEL,
     activeId: null,
     activeName: null,
     dirty: false,
@@ -88,6 +110,8 @@ function readWorkingCopy(): { state: Omit<StoreState, "snapshots">; } {
     return {
       state: {
         tasks: mergeSaved(parsed.tasks),
+        streams: mergeStreams(parsed.streams),
+        rootLabel: parsed.rootLabel?.trim() || BASELINE_ROOT_LABEL,
         activeId: parsed.activeId ?? null,
         activeName: parsed.activeName ?? null,
         dirty: parsed.dirty ?? false,
@@ -101,6 +125,8 @@ function readWorkingCopy(): { state: Omit<StoreState, "snapshots">; } {
 
 const SERVER_STATE: StoreState = {
   tasks: BASELINE_TASKS,
+  streams: BASELINE_STREAMS,
+  rootLabel: BASELINE_ROOT_LABEL,
   activeId: null,
   activeName: null,
   dirty: false,
@@ -136,6 +162,8 @@ function persistWorkingCopy(next: StoreState) {
   const payload: PersistedState = {
     version: 1,
     tasks: next.tasks,
+    streams: next.streams,
+    rootLabel: next.rootLabel,
     activeId: next.activeId,
     activeName: next.activeName,
     dirty: next.dirty,
@@ -160,6 +188,20 @@ export function updateTasks(tasks: Task[]) {
   commit({ tasks, dirty: true });
 }
 
+export function updateStream(id: string, patch: Partial<Pick<Stream, "title" | "shortTitle" | "color">>) {
+  const current = getStoreState();
+  const streams = current.streams.map((s) => (s.id === id ? { ...s, ...patch } : s));
+  commit({ streams, dirty: true });
+}
+
+export function updateRootLabel(rootLabel: string) {
+  commit({ rootLabel, dirty: true });
+}
+
+export function resetStreamNames() {
+  commit({ streams: structuredClone(BASELINE_STREAMS), rootLabel: BASELINE_ROOT_LABEL, dirty: true });
+}
+
 /** Returns the name actually used; a duplicate gets a numeric suffix. */
 function uniqueName(name: string, snapshots: SavedSchedule[], ignoreId?: string) {
   const taken = new Set(snapshots.filter((s) => s.id !== ignoreId).map((s) => s.name));
@@ -177,6 +219,8 @@ export function saveAsNewSchedule(rawName: string): SavedSchedule {
     name,
     savedAt: new Date().toISOString(),
     tasks: structuredClone(current.tasks),
+    streams: structuredClone(current.streams),
+    rootLabel: current.rootLabel,
   };
   commit(
     {
@@ -196,7 +240,13 @@ export function saveActiveSchedule(): boolean {
   if (!current.activeId) return false;
   const snapshots = current.snapshots.map((s) =>
     s.id === current.activeId
-      ? { ...s, savedAt: new Date().toISOString(), tasks: structuredClone(current.tasks) }
+      ? {
+          ...s,
+          savedAt: new Date().toISOString(),
+          tasks: structuredClone(current.tasks),
+          streams: structuredClone(current.streams),
+          rootLabel: current.rootLabel,
+        }
       : s,
   );
   commit({ snapshots, dirty: false }, { persistLibrary: true });
@@ -209,6 +259,8 @@ export function loadSchedule(id: string): boolean {
   if (!snapshot) return false;
   commit({
     tasks: mergeSaved(structuredClone(snapshot.tasks)),
+    streams: mergeStreams(snapshot.streams),
+    rootLabel: snapshot.rootLabel?.trim() || BASELINE_ROOT_LABEL,
     activeId: snapshot.id,
     activeName: snapshot.name,
     dirty: false,
@@ -247,6 +299,8 @@ export function deleteSchedule(id: string) {
 export function resetToBaseline() {
   commit({
     tasks: structuredClone(BASELINE_TASKS),
+    streams: structuredClone(BASELINE_STREAMS),
+    rootLabel: BASELINE_ROOT_LABEL,
     activeId: null,
     activeName: null,
     dirty: false,
@@ -264,12 +318,14 @@ export function exportPayload(id?: string): { filename: string; json: string } |
       json: JSON.stringify({ version: 1, snapshots: [snapshot] }, null, 2),
     };
   }
-  const name = current.activeName ?? "TCR DB 엔진 스케줄";
+  const name = current.activeName ?? `${current.rootLabel} 스케줄`;
   const snapshot: SavedSchedule = {
     id: current.activeId ?? newId(),
     name,
     savedAt: new Date().toISOString(),
     tasks: current.tasks,
+    streams: current.streams,
+    rootLabel: current.rootLabel,
   };
   return {
     filename: `${name.replace(/[^\w가-힣 -]/g, "_")}.json`,
@@ -304,6 +360,8 @@ export function importFromJson(text: string): { added: number; error: string | n
       name: uniqueName(item.name.trim() || "가져온 스케줄", snapshots),
       savedAt: item.savedAt ?? new Date().toISOString(),
       tasks: mergeSaved(item.tasks),
+      streams: mergeStreams(item.streams),
+      rootLabel: item.rootLabel?.trim() || BASELINE_ROOT_LABEL,
     };
     snapshots = [snapshot, ...snapshots];
   }

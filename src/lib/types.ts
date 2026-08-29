@@ -48,6 +48,8 @@ export type MindNode = {
 export type PersistedState = {
   version: 1;
   tasks: Task[];
+  streams?: Stream[];
+  rootLabel?: string;
   activeId?: string | null;
   activeName?: string | null;
   dirty?: boolean;
@@ -58,6 +60,8 @@ export type SavedSchedule = {
   name: string;
   savedAt: string;
   tasks: Task[];
+  streams?: Stream[];
+  rootLabel?: string;
 };
 
 export type ScheduleLibrary = {
@@ -67,6 +71,8 @@ export type ScheduleLibrary = {
 
 export type StoreState = {
   tasks: Task[];
+  streams: Stream[];
+  rootLabel: string;
   activeId: string | null;
   activeName: string | null;
   dirty: boolean;

@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { CELL_LABEL, MIND_TREE, STREAM_MAP, taskProgress, taskStatus } from "@/lib/schedule-data";
-import type { MindNode, Task } from "@/lib/types";
+import { CELL_LABEL, streamMapOf, taskProgress, taskStatus } from "@/lib/schedule-data";
+import type { MindNode, Stream, Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type LaidOut = {
@@ -45,10 +45,14 @@ function subtreeHeight(node: MindNode, collapsed: Set<string>): number {
   }, 0);
 }
 
-function layoutTree(root: MindNode, collapsed: Set<string>): { nodes: LaidOut[]; width: number; height: number } {
+function layoutTree(
+  root: MindNode,
+  collapsed: Set<string>,
+  streamMap: Record<string, Stream>,
+): { nodes: LaidOut[]; width: number; height: number } {
   const nodes: LaidOut[] = [];
-  const left = (root.children ?? []).filter((c) => STREAM_MAP[c.streamId ?? ""]?.side === "left");
-  const right = (root.children ?? []).filter((c) => STREAM_MAP[c.streamId ?? ""]?.side !== "left");
+  const left = (root.children ?? []).filter((c) => streamMap[c.streamId ?? ""]?.side === "left");
+  const right = (root.children ?? []).filter((c) => streamMap[c.streamId ?? ""]?.side !== "left");
 
   const leftH = left.reduce((s, n, i) => s + subtreeHeight(n, collapsed) + (i ? BRANCH_GAP : 0), 0);
   const rightH = right.reduce((s, n, i) => s + subtreeHeight(n, collapsed) + (i ? BRANCH_GAP : 0), 0);
@@ -73,7 +77,7 @@ function layoutTree(root: MindNode, collapsed: Set<string>): { nodes: LaidOut[];
   });
 
   function colorOf(node: MindNode) {
-    if (node.streamId && STREAM_MAP[node.streamId]) return STREAM_MAP[node.streamId].color;
+    if (node.streamId && streamMap[node.streamId]) return streamMap[node.streamId].color;
     return "#334155";
   }
 
@@ -147,19 +151,25 @@ function linkPath(from: LaidOut, to: LaidOut) {
 }
 
 type MindMapProps = {
+  tree: MindNode;
   tasks: Task[];
+  streams: Stream[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   highlightedTaskIds: Set<string>;
 };
 
-export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: MindMapProps) {
+export function MindMap({ tree, tasks, streams, selectedId, onSelect, highlightedTaskIds }: MindMapProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [transform, setTransform] = useState({ x: 0, y: 12, scale: 0.78 });
   const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
 
-  const { nodes, width, height } = useMemo(() => layoutTree(MIND_TREE, collapsed), [collapsed]);
+  const streamMap = useMemo(() => streamMapOf(streams), [streams]);
+  const { nodes, width, height } = useMemo(
+    () => layoutTree(tree, collapsed, streamMap),
+    [tree, collapsed, streamMap],
+  );
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
 

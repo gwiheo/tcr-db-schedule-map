@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { RotateCcw, X } from "lucide-react";
+import { Pencil, RotateCcw, X } from "lucide-react";
 
 import { MindMap } from "@/components/mind-map";
+import { NameEditor } from "@/components/name-editor";
 import { ScheduleLibraryBar } from "@/components/schedule-library";
 import { ScheduleTable } from "@/components/schedule-table";
 import { TaskDetailPanel } from "@/components/task-detail-panel";
@@ -12,14 +13,13 @@ import { Progress } from "@/components/ui/progress";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   CELL_LABEL,
-  MIND_TREE,
   STATUS_LABEL,
-  STREAMS,
-  STREAM_MAP,
+  buildMindTree,
   cellOf,
   descendantTaskIds,
   findNode,
   nextCellStatus,
+  streamMapOf,
   taskProgress,
   taskStatus,
 } from "@/lib/schedule-data";
@@ -31,10 +31,13 @@ import {
   importFromJson,
   loadSchedule,
   renameSchedule,
+  resetStreamNames,
   resetToBaseline,
   saveActiveSchedule,
   saveAsNewSchedule,
   subscribeStore,
+  updateRootLabel,
+  updateStream,
   updateTasks,
 } from "@/lib/storage";
 import type { CellStatus, Task } from "@/lib/types";
@@ -43,15 +46,17 @@ import { cn } from "@/lib/utils";
 
 export function SchedulerApp() {
   const store = useSyncExternalStore(subscribeStore, getStoreState, getServerState);
-  const { tasks, snapshots, activeName, dirty, error } = store;
+  const { tasks, streams, rootLabel, snapshots, activeName, dirty, error } = store;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [thisWeekOnly, setThisWeekOnly] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [saveAsHint, setSaveAsHint] = useState(false);
+  const [namesOpen, setNamesOpen] = useState(false);
   const nowWeek = currentWeekIndex();
 
-  const selectedNode = selectedNodeId ? findNode(MIND_TREE, selectedNodeId) : null;
+  const mindTree = useMemo(() => buildMindTree(streams, tasks, rootLabel), [streams, tasks, rootLabel]);
+  const selectedNode = selectedNodeId ? findNode(mindTree, selectedNodeId) : null;
   const selectedStreamId =
     selectedNodeId?.startsWith("stream-") ? selectedNodeId.slice("stream-".length) : selectedNode?.streamId;
 
@@ -90,10 +95,17 @@ export function SchedulerApp() {
     };
   }, [tasks]);
 
+  const streamMap = useMemo(() => streamMapOf(streams), [streams]);
+  const taskCountByStream = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const task of tasks) counts[task.streamId] = (counts[task.streamId] ?? 0) + 1;
+    return counts;
+  }, [tasks]);
+
   const currentWeek = WEEKS[nowWeek];
   const thisWeekTasks = tasks.filter((t) => cellOf(t, nowWeek) !== "empty");
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
-  const activeStream = selectedStreamId ? STREAM_MAP[selectedStreamId] : null;
+  const activeStream = selectedStreamId ? streamMap[selectedStreamId] : null;
 
   function patchTask(id: string, updater: (task: Task) => Task) {
     updateTasks(tasks.map((t) => (t.id === id ? updater(t) : t)));
@@ -180,8 +192,10 @@ export function SchedulerApp() {
   const detail = selectedTask ? (
     <TaskDetailPanel
       task={selectedTask}
+      streams={streams}
       currentWeek={nowWeek}
       onClose={() => setSelectedTaskId(null)}
+      onChangeTitle={(title) => patchTask(selectedTask.id, (t) => ({ ...t, title }))}
       onChangeNotes={(notes) => patchTask(selectedTask.id, (t) => ({ ...t, notes }))}
       onChangeOwner={(owner) => patchTask(selectedTask.id, (t) => ({ ...t, owner }))}
       onSetCell={(week, status) => setCell(selectedTask.id, week, status)}
@@ -200,7 +214,7 @@ export function SchedulerApp() {
                   TCR DB Engine · 2026 H2
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-                  TCR DB 엔진 개발 스케줄
+                  {rootLabel} 개발 스케줄
                 </h1>
                 <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                   8월부터 12월까지 22주 전체 트랙입니다. 주간 업무 보고가 아니라, 스토리지·쿼리·트랜잭션·복제 경로가
@@ -267,22 +281,35 @@ export function SchedulerApp() {
           ) : null}
 
           <section className="flex flex-col gap-2">
-            <div className="flex items-end justify-between">
+            <div className="flex flex-wrap items-end justify-between gap-2">
               <h2 className="text-sm font-semibold">개발 마인드맵</h2>
-              {selectedNode && selectedNode.id !== "root" ? (
-                <Button size="sm" variant="ghost" onClick={() => setSelectedNodeId(null)}>
-                  <X data-icon="inline-start" />
-                  필터 해제
+              <div className="flex gap-1.5">
+                {selectedNode && selectedNode.id !== "root" ? (
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedNodeId(null)}>
+                    <X data-icon="inline-start" />
+                    필터 해제
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant={namesOpen ? "default" : "outline"}
+                  data-testid="toggle-name-editor"
+                  onClick={() => setNamesOpen((v) => !v)}
+                >
+                  <Pencil data-icon="inline-start" />
+                  이름 편집
                 </Button>
-              ) : null}
+              </div>
             </div>
             <MindMap
+              tree={mindTree}
               tasks={tasks}
+              streams={streams}
               selectedId={selectedNodeId}
               highlightedTaskIds={highlightedTaskIds}
               onSelect={(id) => {
                 setSelectedNodeId(id);
-                const node = id ? findNode(MIND_TREE, id) : null;
+                const node = id ? findNode(mindTree, id) : null;
                 if (node?.taskId) {
                   setSelectedTaskId(node.taskId);
                 }
@@ -302,7 +329,7 @@ export function SchedulerApp() {
               >
                 전체
               </button>
-              {STREAMS.map((stream) => {
+              {streams.map((stream) => {
                 const active = selectedNodeId === `stream-${stream.id}`;
                 return (
                   <button
@@ -323,6 +350,20 @@ export function SchedulerApp() {
               })}
             </div>
           </section>
+
+          {namesOpen ? (
+            <NameEditor
+              rootLabel={rootLabel}
+              streams={streams}
+              taskCountByStream={taskCountByStream}
+              onChangeRootLabel={updateRootLabel}
+              onChangeStream={updateStream}
+              onResetNames={() => {
+                resetStreamNames();
+                setNotice("영역 이름과 색을 기본값으로 되돌렸습니다.");
+              }}
+            />
+          ) : null}
 
           {detail ? (
             <section className="rounded-xl border bg-card p-4 shadow-sm">{detail}</section>
@@ -360,6 +401,7 @@ export function SchedulerApp() {
               </div>
               <ScheduleTable
                 tasks={visibleTasks}
+                streams={streams}
                 currentWeek={nowWeek}
                 selectedTaskId={selectedTaskId}
                 onSelectTask={setSelectedTaskId}
@@ -383,7 +425,7 @@ export function SchedulerApp() {
                 ) : (
                   thisWeekTasks.map((task) => {
                     const cell = cellOf(task, nowWeek);
-                    const stream = STREAMS.find((s) => s.id === task.streamId);
+                    const stream = streamMap[task.streamId];
                     return (
                       <li key={task.id}>
                         <button

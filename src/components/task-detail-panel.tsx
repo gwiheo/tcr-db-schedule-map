@@ -2,14 +2,16 @@
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { CELL_CYCLE, CELL_LABEL, STATUS_LABEL, STREAM_MAP, cellOf, taskProgress, taskStatus } from "@/lib/schedule-data";
-import type { CellStatus, Task } from "@/lib/types";
+import { CELL_CYCLE, CELL_LABEL, STATUS_LABEL, cellOf, streamMapOf, taskProgress, taskStatus } from "@/lib/schedule-data";
+import type { CellStatus, Stream, Task } from "@/lib/types";
 import { WEEKS } from "@/lib/weeks";
 
 type TaskDetailPanelProps = {
   task: Task;
+  streams: Stream[];
   currentWeek: number;
   onClose: () => void;
+  onChangeTitle: (title: string) => void;
   onChangeNotes: (notes: string) => void;
   onChangeOwner: (owner: string) => void;
   onSetCell: (week: number, status: CellStatus) => void;
@@ -18,29 +20,37 @@ type TaskDetailPanelProps = {
 
 export function TaskDetailPanel({
   task,
+  streams,
   currentWeek,
   onClose,
+  onChangeTitle,
   onChangeNotes,
   onChangeOwner,
   onSetCell,
   onMarkAll,
 }: TaskDetailPanelProps) {
-  const stream = STREAM_MAP[task.streamId];
+  const stream = streamMapOf(streams)[task.streamId];
   const status = taskStatus(task);
 
   return (
     <div data-testid="task-detail" className="flex h-full flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium" style={{ color: stream?.color }}>
-            {stream?.title}
-          </p>
-          <h3 className="text-base font-semibold leading-6">{task.title}</h3>
-        </div>
+        <p className="text-xs font-medium" style={{ color: stream?.color }}>
+          {stream?.title}
+        </p>
         <Button size="sm" variant="ghost" onClick={onClose} aria-label="상세 닫기">
           닫기
         </Button>
       </div>
+      <label className="grid gap-1">
+        <span className="text-xs text-muted-foreground">업무 제목</span>
+        <input
+          data-testid="task-title-input"
+          value={task.title}
+          onChange={(e) => onChangeTitle(e.target.value)}
+          className="h-9 rounded-lg border border-input bg-background px-2.5 text-base font-semibold outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        />
+      </label>
       <p className="text-sm text-muted-foreground">{task.summary}</p>
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded-full bg-muted px-2 py-0.5">{STATUS_LABEL[status]}</span>

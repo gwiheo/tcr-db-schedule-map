@@ -1,7 +1,7 @@
 import type { CellStatus, Milestone, MindNode, Stream, Task, TaskStatus } from "./types";
 import { currentWeekIndex, WEEKS } from "./weeks";
 
-export const STREAMS: Stream[] = [
+export const BASELINE_STREAMS: Stream[] = [
   { id: "arch", title: "아키텍처 · 설계", shortTitle: "설계", color: "#4338ca", side: "left" },
   { id: "storage", title: "스토리지 엔진", shortTitle: "스토리지", color: "#0f766e", side: "left" },
   { id: "query", title: "쿼리 엔진", shortTitle: "쿼리", color: "#b45309", side: "left" },
@@ -11,7 +11,11 @@ export const STREAMS: Stream[] = [
   { id: "qa", title: "품질 · 릴리스", shortTitle: "품질", color: "#047857", side: "right" },
 ];
 
-export const STREAM_MAP = Object.fromEntries(STREAMS.map((s) => [s.id, s]));
+export const BASELINE_ROOT_LABEL = "TCR DB 엔진";
+
+export function streamMapOf(streams: Stream[]): Record<string, Stream> {
+  return Object.fromEntries(streams.map((s) => [s.id, s]));
+}
 
 export function seedWeekStatus(
   startWeek: number,
@@ -405,21 +409,25 @@ export const MILESTONES: Milestone[] = [
   { id: "m5", title: "M5 GA", week: 21 },
 ];
 
-export const MIND_TREE: MindNode = {
-  id: "root",
-  label: "TCR DB 엔진",
-  children: STREAMS.map((stream) => ({
-    id: `stream-${stream.id}`,
-    label: stream.title,
-    streamId: stream.id,
-    children: BASELINE_TASKS.filter((t) => t.streamId === stream.id).map((t) => ({
-      id: `task-${t.id}`,
-      label: t.title,
+export function buildMindTree(streams: Stream[], tasks: Task[], rootLabel = BASELINE_ROOT_LABEL): MindNode {
+  return {
+    id: "root",
+    label: rootLabel,
+    children: streams.map((stream) => ({
+      id: `stream-${stream.id}`,
+      label: stream.title,
       streamId: stream.id,
-      taskId: t.id,
+      children: tasks
+        .filter((t) => t.streamId === stream.id)
+        .map((t) => ({
+          id: `task-${t.id}`,
+          label: t.title,
+          streamId: stream.id,
+          taskId: t.id,
+        })),
     })),
-  })),
-};
+  };
+}
 
 export const CELL_CYCLE: CellStatus[] = ["planned", "active", "done", "blocked"];
 
