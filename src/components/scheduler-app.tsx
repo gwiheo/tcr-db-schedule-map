@@ -5,6 +5,7 @@ import { Pencil, RotateCcw, X } from "lucide-react";
 
 import { MindMap } from "@/components/mind-map";
 import { NameEditor } from "@/components/name-editor";
+import { RootNodeWindow } from "@/components/root-node-window";
 import { ScheduleLibraryBar } from "@/components/schedule-library";
 import { ScheduleTable } from "@/components/schedule-table";
 import { TaskDetailPanel } from "@/components/task-detail-panel";
@@ -41,6 +42,7 @@ import {
   saveAsNewSchedule,
   subscribeStore,
   updateRootLabel,
+  updateRootNotes,
   updateStream,
   updateTasks,
 } from "@/lib/storage";
@@ -50,13 +52,14 @@ import { cn } from "@/lib/utils";
 
 export function SchedulerApp() {
   const store = useSyncExternalStore(subscribeStore, getStoreState, getServerState);
-  const { tasks, streams, rootLabel, snapshots, activeName, dirty, error } = store;
+  const { tasks, streams, rootLabel, rootNotes, snapshots, activeName, dirty, error } = store;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [thisWeekOnly, setThisWeekOnly] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [saveAsHint, setSaveAsHint] = useState(false);
   const [namesOpen, setNamesOpen] = useState(false);
+  const [rootWindowOpen, setRootWindowOpen] = useState(false);
   const nowWeek = currentWeekIndex();
 
   const mindTree = useMemo(() => buildMindTree(streams, tasks, rootLabel), [streams, tasks, rootLabel]);
@@ -145,6 +148,7 @@ export function SchedulerApp() {
     resetToBaseline();
     setSelectedNodeId(null);
     setSelectedTaskId(null);
+    setRootWindowOpen(false);
     setNotice("기본 계획으로 되돌렸습니다. 저장된 스케줄은 그대로 남아 있습니다.");
   }
 
@@ -171,6 +175,7 @@ export function SchedulerApp() {
     }
     if (loadSchedule(id)) {
       setSelectedTaskId(null);
+      setRootWindowOpen(false);
       setNotice(`「${snapshot?.name}」을 불러왔습니다.`);
     }
   }
@@ -317,15 +322,32 @@ export function SchedulerApp() {
               tree={mindTree}
               tasks={tasks}
               streams={streams}
-              selectedId={selectedNodeId}
+              selectedId={rootWindowOpen ? "root" : selectedNodeId}
               highlightedTaskIds={highlightedTaskIds}
+              rootHasNotes={rootNotes.trim().length > 0}
               onSelect={(id) => {
+                if (id === "root") {
+                  setRootWindowOpen(true);
+                  return;
+                }
+                if (id === null && rootWindowOpen) {
+                  setRootWindowOpen(false);
+                  return;
+                }
+                setRootWindowOpen(false);
                 setSelectedNodeId(id);
                 const node = id ? findNode(mindTree, id) : null;
                 if (node?.taskId) {
                   setSelectedTaskId(node.taskId);
                 }
               }}
+            />
+            <RootNodeWindow
+              open={rootWindowOpen}
+              label={rootLabel}
+              notes={rootNotes}
+              onChangeNotes={updateRootNotes}
+              onClose={() => setRootWindowOpen(false)}
             />
             <div className="flex flex-wrap gap-1.5">
               <button

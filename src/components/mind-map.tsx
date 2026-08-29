@@ -157,9 +157,18 @@ type MindMapProps = {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   highlightedTaskIds: Set<string>;
+  rootHasNotes?: boolean;
 };
 
-export function MindMap({ tree, tasks, streams, selectedId, onSelect, highlightedTaskIds }: MindMapProps) {
+export function MindMap({
+  tree,
+  tasks,
+  streams,
+  selectedId,
+  onSelect,
+  highlightedTaskIds,
+  rootHasNotes = false,
+}: MindMapProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [transform, setTransform] = useState({ x: 0, y: 12, scale: 0.78 });
   const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean } | null>(null);
@@ -267,7 +276,7 @@ export function MindMap({ tree, tasks, streams, selectedId, onSelect, highlighte
         </Button>
       </div>
       <p className="absolute left-4 top-3 z-10 hidden text-xs text-stone-500 sm:block">
-        노드를 눌러 아래 일정을 필터합니다 · 빈 곳은 드래그, 휠은 확대
+        가운데 노드를 누르면 메모 창이 열립니다 · 가지·업무는 아래 일정 필터 · 빈 곳은 드래그
       </p>
       <div
         ref={viewportRef}
@@ -339,9 +348,11 @@ export function MindMap({ tree, tasks, streams, selectedId, onSelect, highlighte
                   type="button"
                   data-testid={`mind-node-${n.id}`}
                   title={
-                    task
-                      ? `${task.title} · ${CELL_LABEL[status ?? "planned"]} · ${taskProgress(task)}%`
-                      : n.label
+                    n.depth === 0
+                      ? `${n.label} · 클릭하여 메모 열기${rootHasNotes ? " · 메모 있음" : ""}`
+                      : task
+                        ? `${task.title} · ${CELL_LABEL[status ?? "planned"]} · ${taskProgress(task)}%`
+                        : n.label
                   }
                   onClick={() => onSelect(selected ? null : n.id)}
                   className={cn(
@@ -365,7 +376,7 @@ export function MindMap({ tree, tasks, streams, selectedId, onSelect, highlighte
                     {n.label}
                     {n.depth === 0 ? (
                       <span className="mt-0.5 block text-[10px] font-normal text-slate-300">
-                        2026.08 – 12 · 22주
+                        {rootHasNotes ? "메모 있음" : "메모 열기"}
                       </span>
                     ) : null}
                   </span>

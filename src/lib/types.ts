@@ -50,6 +50,7 @@ export type PersistedState = {
   tasks: Task[];
   streams?: Stream[];
   rootLabel?: string;
+  rootNotes?: string;
   activeId?: string | null;
   activeName?: string | null;
   dirty?: boolean;
@@ -62,6 +63,7 @@ export type SavedSchedule = {
   tasks: Task[];
   streams?: Stream[];
   rootLabel?: string;
+  rootNotes?: string;
 };
 
 export type ScheduleLibrary = {
@@ -73,6 +75,7 @@ export type StoreState = {
   tasks: Task[];
   streams: Stream[];
   rootLabel: string;
+  rootNotes: string;
   activeId: string | null;
   activeName: string | null;
   dirty: boolean;

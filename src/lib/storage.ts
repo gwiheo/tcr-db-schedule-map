@@ -133,6 +133,7 @@ function readLibrary(): SavedSchedule[] {
         tasks: hydrated.tasks,
         streams: hydrated.streams,
         rootLabel: s.rootLabel?.trim() || BASELINE_ROOT_LABEL,
+        rootNotes: typeof s.rootNotes === "string" ? s.rootNotes : "",
       };
     });
   } catch {
@@ -150,6 +151,7 @@ function readWorkingCopy(): { state: Omit<StoreState, "snapshots"> } {
     tasks: structuredClone(BASELINE_TASKS),
     streams: structuredClone(BASELINE_STREAMS),
     rootLabel: BASELINE_ROOT_LABEL,
+    rootNotes: "",
     activeId: null,
     activeName: null,
     dirty: false,
@@ -168,6 +170,7 @@ function readWorkingCopy(): { state: Omit<StoreState, "snapshots"> } {
         tasks: hydrated.tasks,
         streams: hydrated.streams,
         rootLabel: parsed.rootLabel?.trim() || BASELINE_ROOT_LABEL,
+        rootNotes: typeof parsed.rootNotes === "string" ? parsed.rootNotes : "",
         activeId: parsed.activeId ?? null,
         activeName: parsed.activeName ?? null,
         dirty: parsed.dirty ?? false,
@@ -183,6 +186,7 @@ const SERVER_STATE: StoreState = {
   tasks: BASELINE_TASKS,
   streams: BASELINE_STREAMS,
   rootLabel: BASELINE_ROOT_LABEL,
+  rootNotes: "",
   activeId: null,
   activeName: null,
   dirty: false,
@@ -220,6 +224,7 @@ function persistWorkingCopy(next: StoreState) {
     tasks: next.tasks,
     streams: next.streams,
     rootLabel: next.rootLabel,
+    rootNotes: next.rootNotes,
     activeId: next.activeId,
     activeName: next.activeName,
     dirty: next.dirty,
@@ -255,6 +260,10 @@ export function updateStream(
 
 export function updateRootLabel(rootLabel: string) {
   commit({ rootLabel, dirty: true });
+}
+
+export function updateRootNotes(rootNotes: string) {
+  commit({ rootNotes, dirty: true });
 }
 
 /** Restores labels and colors of original areas. Added/removed areas stay as they are. */
@@ -389,6 +398,7 @@ export function saveAsNewSchedule(rawName: string): SavedSchedule {
     tasks: structuredClone(current.tasks),
     streams: structuredClone(current.streams),
     rootLabel: current.rootLabel,
+    rootNotes: current.rootNotes,
   };
   commit(
     {
@@ -414,6 +424,7 @@ export function saveActiveSchedule(): boolean {
           tasks: structuredClone(current.tasks),
           streams: structuredClone(current.streams),
           rootLabel: current.rootLabel,
+          rootNotes: current.rootNotes,
         }
       : s,
   );
@@ -430,6 +441,7 @@ export function loadSchedule(id: string): boolean {
     tasks: hydrated.tasks,
     streams: hydrated.streams,
     rootLabel: snapshot.rootLabel?.trim() || BASELINE_ROOT_LABEL,
+    rootNotes: typeof snapshot.rootNotes === "string" ? snapshot.rootNotes : "",
     activeId: snapshot.id,
     activeName: snapshot.name,
     dirty: false,
@@ -470,6 +482,7 @@ export function resetToBaseline() {
     tasks: structuredClone(BASELINE_TASKS),
     streams: structuredClone(BASELINE_STREAMS),
     rootLabel: BASELINE_ROOT_LABEL,
+    rootNotes: "",
     activeId: null,
     activeName: null,
     dirty: false,
@@ -495,6 +508,7 @@ export function exportPayload(id?: string): { filename: string; json: string } |
     tasks: current.tasks,
     streams: current.streams,
     rootLabel: current.rootLabel,
+    rootNotes: current.rootNotes,
   };
   return {
     filename: `${name.replace(/[^\w가-힣 -]/g, "_")}.json`,
@@ -532,6 +546,7 @@ export function importFromJson(text: string): { added: number; error: string | n
       tasks: hydrated.tasks,
       streams: hydrated.streams,
       rootLabel: item.rootLabel?.trim() || BASELINE_ROOT_LABEL,
+      rootNotes: typeof item.rootNotes === "string" ? item.rootNotes : "",
     };
     snapshots = [snapshot, ...snapshots];
   }
