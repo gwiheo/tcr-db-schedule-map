@@ -297,6 +297,8 @@ function StreamRows({
           <tr
             key={task.id}
             id={`task-row-${task.id}`}
+            data-testid={`task-row-${task.id}`}
+            data-stream={streamId}
             className={cn("group", selected && "bg-amber-50/60")}
           >
             <td
