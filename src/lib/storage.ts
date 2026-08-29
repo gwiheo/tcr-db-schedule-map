@@ -1,8 +1,21 @@
 import { BASELINE_ROOT_LABEL, BASELINE_STREAMS, BASELINE_TASKS } from "./schedule-data";
-import type { PersistedState, SavedSchedule, ScheduleLibrary, Stream, StoreState, Task } from "./types";
+import type { BranchSide, PersistedState, SavedSchedule, ScheduleLibrary, Stream, StoreState, Task } from "./types";
 
 const WORK_KEY = "tcr-db-engine-schedule-v1";
 const LIBRARY_KEY = "tcr-db-engine-library-v1";
+
+const EXTRA_STREAM_COLORS = [
+  "#0d9488",
+  "#db2777",
+  "#65a30d",
+  "#c026d3",
+  "#ea580c",
+  "#0284c7",
+  "#ca8a04",
+  "#4f46e5",
+  "#64748b",
+  "#9333ea",
+];
 
 function isTask(value: unknown): value is Task {
   if (!value || typeof value !== "object") return false;
@@ -16,44 +29,86 @@ function isTask(value: unknown): value is Task {
   );
 }
 
-/** Keeps saved edits (including renamed titles) while filling gaps from the baseline plan. */
-function mergeSaved(savedList: Task[]): Task[] {
-  const saved = new Map(savedList.filter(isTask).map((t) => [t.id, t]));
-  return BASELINE_TASKS.map((base) => {
-    const prev = saved.get(base.id);
-    if (!prev) return structuredClone(base);
-    return {
-      ...base,
-      ...prev,
-      id: base.id,
-      title: prev.title?.trim() || base.title,
-      summary: prev.summary ?? base.summary,
-      streamId: base.streamId,
-      startWeek: prev.startWeek,
-      endWeek: prev.endWeek,
-      owner: prev.owner || base.owner,
-      notes: prev.notes ?? base.notes,
-      weekStatus: { ...base.weekStatus, ...prev.weekStatus },
-    };
-  });
+function isStream(value: unknown): value is Stream {
+  return Boolean(value && typeof value === "object" && typeof (value as Stream).id === "string");
 }
 
+function normalizeStream(raw: Stream, fallback?: Stream): Stream {
+  const title = (raw.title ?? fallback?.title ?? "새 영역").trim() || "새 영역";
+  const shortTitle = (raw.shortTitle ?? fallback?.shortTitle ?? title).trim() || title;
+  const color = /^#[0-9a-fA-F]{6}$/.test(raw.color ?? "") ? (raw.color as string) : (fallback?.color ?? "#64748b");
+  const side: BranchSide =
+    raw.side === "left" || raw.side === "right" ? raw.side : (fallback?.side ?? "right");
+  return { id: raw.id, title, shortTitle, color, side };
+}
+
+/**
+ * Preserves saved stream order and membership so added areas stay and deleted
+ * baseline areas do not come back on reload.
+ */
 function mergeStreams(savedList: Stream[] | undefined): Stream[] {
+  const baseById = new Map(BASELINE_STREAMS.map((s) => [s.id, s]));
   if (!Array.isArray(savedList)) return structuredClone(BASELINE_STREAMS);
-  const saved = new Map(
-    savedList.filter((s) => s && typeof s === "object" && typeof s.id === "string").map((s) => [s.id, s]),
-  );
-  return BASELINE_STREAMS.map((base) => {
-    const prev = saved.get(base.id);
-    if (!prev) return structuredClone(base);
-    return {
-      ...base,
-      title: prev.title?.trim() || base.title,
-      shortTitle: prev.shortTitle?.trim() || base.shortTitle,
-      color: /^#[0-9a-fA-F]{6}$/.test(prev.color ?? "") ? prev.color : base.color,
-      side: prev.side === "left" || prev.side === "right" ? prev.side : base.side,
-    };
-  });
+
+  const seen = new Set<string>();
+  const out: Stream[] = [];
+  for (const raw of savedList) {
+    if (!isStream(raw) || seen.has(raw.id)) continue;
+    seen.add(raw.id);
+    out.push(normalizeStream(raw, baseById.get(raw.id)));
+  }
+  return out.length ? out : structuredClone(BASELINE_STREAMS);
+}
+
+/** Keeps saved edits and extra tasks; drops work whose area no longer exists. */
+function mergeSaved(savedList: Task[] | undefined, streams: Stream[]): Task[] {
+  const streamIds = new Set(streams.map((s) => s.id));
+  const fallbackStreamId = streams[0]?.id;
+  const baseById = new Map(BASELINE_TASKS.map((t) => [t.id, t]));
+
+  if (!Array.isArray(savedList)) {
+    return BASELINE_TASKS.filter((t) => streamIds.has(t.streamId)).map((t) => structuredClone(t));
+  }
+
+  const seen = new Set<string>();
+  const out: Task[] = [];
+
+  for (const prev of savedList.filter(isTask)) {
+    if (seen.has(prev.id)) continue;
+    const base = baseById.get(prev.id);
+    const streamId =
+      prev.streamId && streamIds.has(prev.streamId)
+        ? prev.streamId
+        : base && streamIds.has(base.streamId)
+          ? base.streamId
+          : fallbackStreamId;
+    if (!streamId || !streamIds.has(streamId)) continue;
+    seen.add(prev.id);
+    out.push({
+      id: prev.id,
+      title: prev.title?.trim() || base?.title || "작업",
+      summary: prev.summary ?? base?.summary ?? "",
+      streamId,
+      owner: prev.owner || base?.owner || "",
+      startWeek: Number.isFinite(prev.startWeek) ? prev.startWeek : (base?.startWeek ?? 0),
+      endWeek: Number.isFinite(prev.endWeek) ? prev.endWeek : (base?.endWeek ?? 0),
+      notes: prev.notes ?? base?.notes ?? "",
+      weekStatus: { ...(base?.weekStatus ?? {}), ...prev.weekStatus },
+    });
+  }
+
+  for (const base of BASELINE_TASKS) {
+    if (seen.has(base.id) || !streamIds.has(base.streamId)) continue;
+    seen.add(base.id);
+    out.push(structuredClone(base));
+  }
+
+  return out;
+}
+
+function hydrate(tasks: Task[] | undefined, streams: Stream[] | undefined) {
+  const nextStreams = mergeStreams(streams);
+  return { streams: nextStreams, tasks: mergeSaved(tasks, nextStreams) };
 }
 
 function isSavedSchedule(value: unknown): value is SavedSchedule {
@@ -73,13 +128,16 @@ function readLibrary(): SavedSchedule[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ScheduleLibrary;
     if (parsed.version !== 1 || !Array.isArray(parsed.snapshots)) return [];
-    return parsed.snapshots.filter(isSavedSchedule).map((s) => ({
-      ...s,
-      savedAt: s.savedAt ?? new Date().toISOString(),
-      tasks: mergeSaved(s.tasks),
-      streams: mergeStreams(s.streams),
-      rootLabel: s.rootLabel?.trim() || BASELINE_ROOT_LABEL,
-    }));
+    return parsed.snapshots.filter(isSavedSchedule).map((s) => {
+      const hydrated = hydrate(s.tasks, s.streams);
+      return {
+        ...s,
+        savedAt: s.savedAt ?? new Date().toISOString(),
+        tasks: hydrated.tasks,
+        streams: hydrated.streams,
+        rootLabel: s.rootLabel?.trim() || BASELINE_ROOT_LABEL,
+      };
+    });
   } catch {
     return [];
   }
@@ -107,10 +165,11 @@ function readWorkingCopy(): { state: Omit<StoreState, "snapshots"> } {
     if (parsed.version !== 1 || !Array.isArray(parsed.tasks)) {
       return { state: { ...empty, error: "저장된 일정이 손상되어 기본 계획으로 되돌렸습니다." } };
     }
+    const hydrated = hydrate(parsed.tasks, parsed.streams);
     return {
       state: {
-        tasks: mergeSaved(parsed.tasks),
-        streams: mergeStreams(parsed.streams),
+        tasks: hydrated.tasks,
+        streams: hydrated.streams,
         rootLabel: parsed.rootLabel?.trim() || BASELINE_ROOT_LABEL,
         activeId: parsed.activeId ?? null,
         activeName: parsed.activeName ?? null,
@@ -188,7 +247,10 @@ export function updateTasks(tasks: Task[]) {
   commit({ tasks, dirty: true });
 }
 
-export function updateStream(id: string, patch: Partial<Pick<Stream, "title" | "shortTitle" | "color">>) {
+export function updateStream(
+  id: string,
+  patch: Partial<Pick<Stream, "title" | "shortTitle" | "color" | "side">>,
+) {
   const current = getStoreState();
   const streams = current.streams.map((s) => (s.id === id ? { ...s, ...patch } : s));
   commit({ streams, dirty: true });
@@ -198,8 +260,63 @@ export function updateRootLabel(rootLabel: string) {
   commit({ rootLabel, dirty: true });
 }
 
+/** Restores labels and colors of original areas. Added/removed areas stay as they are. */
 export function resetStreamNames() {
-  commit({ streams: structuredClone(BASELINE_STREAMS), rootLabel: BASELINE_ROOT_LABEL, dirty: true });
+  const current = getStoreState();
+  const baseById = new Map(BASELINE_STREAMS.map((s) => [s.id, s]));
+  const streams = current.streams.map((s) => {
+    const base = baseById.get(s.id);
+    if (!base) return s;
+    return { ...s, title: base.title, shortTitle: base.shortTitle, color: base.color, side: base.side };
+  });
+  commit({ streams, rootLabel: BASELINE_ROOT_LABEL, dirty: true });
+}
+
+function uniqueLabel(existing: string[], base: string) {
+  if (!existing.includes(base)) return base;
+  let n = 2;
+  while (existing.includes(`${base} ${n}`)) n += 1;
+  return `${base} ${n}`;
+}
+
+function pickStreamColor(streams: Stream[]) {
+  const used = new Set(streams.map((s) => s.color.toLowerCase()));
+  const palette = [...BASELINE_STREAMS.map((s) => s.color), ...EXTRA_STREAM_COLORS];
+  return palette.find((c) => !used.has(c.toLowerCase())) ?? palette[streams.length % palette.length];
+}
+
+export function addStream(): Stream {
+  const current = getStoreState();
+  const leftCount = current.streams.filter((s) => s.side === "left").length;
+  const rightCount = current.streams.length - leftCount;
+  const stream: Stream = {
+    id: newId(),
+    title: uniqueLabel(
+      current.streams.map((s) => s.title),
+      "새 영역",
+    ),
+    shortTitle: uniqueLabel(
+      current.streams.map((s) => s.shortTitle),
+      "새 영역",
+    ),
+    color: pickStreamColor(current.streams),
+    side: leftCount <= rightCount ? "left" : "right",
+  };
+  commit({ streams: [...current.streams, stream], dirty: true });
+  return stream;
+}
+
+/** Removes an area and every task in it. Refuses to delete the last remaining area. */
+export function deleteStream(id: string): boolean {
+  const current = getStoreState();
+  if (current.streams.length <= 1) return false;
+  if (!current.streams.some((s) => s.id === id)) return false;
+  commit({
+    streams: current.streams.filter((s) => s.id !== id),
+    tasks: current.tasks.filter((t) => t.streamId !== id),
+    dirty: true,
+  });
+  return true;
 }
 
 /** Returns the name actually used; a duplicate gets a numeric suffix. */
@@ -257,9 +374,10 @@ export function loadSchedule(id: string): boolean {
   const current = getStoreState();
   const snapshot = current.snapshots.find((s) => s.id === id);
   if (!snapshot) return false;
+  const hydrated = hydrate(structuredClone(snapshot.tasks), snapshot.streams);
   commit({
-    tasks: mergeSaved(structuredClone(snapshot.tasks)),
-    streams: mergeStreams(snapshot.streams),
+    tasks: hydrated.tasks,
+    streams: hydrated.streams,
     rootLabel: snapshot.rootLabel?.trim() || BASELINE_ROOT_LABEL,
     activeId: snapshot.id,
     activeName: snapshot.name,
@@ -355,12 +473,13 @@ export function importFromJson(text: string): { added: number; error: string | n
   const current = getStoreState();
   let snapshots = current.snapshots;
   for (const item of valid) {
+    const hydrated = hydrate(item.tasks, item.streams);
     const snapshot: SavedSchedule = {
       id: newId(),
       name: uniqueName(item.name.trim() || "가져온 스케줄", snapshots),
       savedAt: item.savedAt ?? new Date().toISOString(),
-      tasks: mergeSaved(item.tasks),
-      streams: mergeStreams(item.streams),
+      tasks: hydrated.tasks,
+      streams: hydrated.streams,
       rootLabel: item.rootLabel?.trim() || BASELINE_ROOT_LABEL,
     };
     snapshots = [snapshot, ...snapshots];

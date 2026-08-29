@@ -68,6 +68,7 @@ type ScheduleTableProps = {
   selectedTaskId: string | null;
   onSelectTask: (id: string) => void;
   onCycleCell: (taskId: string, week: number) => void;
+  showEmptyStreams?: boolean;
   emptyMessage?: string;
 };
 
@@ -78,6 +79,7 @@ export function ScheduleTable({
   selectedTaskId,
   onSelectTask,
   onCycleCell,
+  showEmptyStreams = false,
   emptyMessage,
 }: ScheduleTableProps) {
   const streamMap = streamMapOf(streams);
@@ -86,6 +88,19 @@ export function ScheduleTable({
     const list = byStream.get(task.streamId) ?? [];
     list.push(task);
     byStream.set(task.streamId, list);
+  }
+
+  const visibleStreamIds: string[] = [];
+  const seen = new Set<string>();
+  for (const stream of streams) {
+    const n = byStream.get(stream.id)?.length ?? 0;
+    if (n > 0 || showEmptyStreams) {
+      visibleStreamIds.push(stream.id);
+      seen.add(stream.id);
+    }
+  }
+  for (const streamId of byStream.keys()) {
+    if (!seen.has(streamId)) visibleStreamIds.push(streamId);
   }
 
   return (
@@ -167,14 +182,14 @@ export function ScheduleTable({
               );
             })}
           </tr>
-          {tasks.length === 0 ? (
+          {visibleStreamIds.length === 0 ? (
             <tr>
               <td colSpan={3 + WEEKS.length} className="px-4 py-12 text-center text-sm text-muted-foreground">
                 {emptyMessage ?? "표시할 일정이 없습니다."}
               </td>
             </tr>
           ) : (
-            [...byStream.entries()].map(([streamId, streamTasks]) => {
+            visibleStreamIds.map((streamId) => {
               const stream = streamMap[streamId];
               return (
                 <StreamRows
@@ -182,7 +197,7 @@ export function ScheduleTable({
                   streamId={streamId}
                   streamTitle={stream?.title ?? streamId}
                   color={stream?.color ?? "#57534e"}
-                  tasks={streamTasks}
+                  tasks={byStream.get(streamId) ?? []}
                   currentWeek={currentWeek}
                   selectedTaskId={selectedTaskId}
                   onSelectTask={onSelectTask}
@@ -226,9 +241,18 @@ function StreamRows({
           style={{ backgroundColor: color }}
         >
           {streamTitle}
-          <span className="ml-2 font-normal opacity-80">평균 {avg}%</span>
+          <span className="ml-2 font-normal opacity-80">
+            {tasks.length === 0 ? "업무 없음" : `평균 ${avg}%`}
+          </span>
         </td>
       </tr>
+      {tasks.length === 0 ? (
+        <tr>
+          <td colSpan={3 + WEEKS.length} className="border-b px-3 py-3 text-xs text-muted-foreground">
+            이 영역에 아직 업무가 없습니다. 이름만 잡아 두고 이후 일정을 채우면 됩니다.
+          </td>
+        </tr>
+      ) : null}
       {tasks.map((task) => {
         const status = taskStatus(task);
         const selected = selectedTaskId === task.id;

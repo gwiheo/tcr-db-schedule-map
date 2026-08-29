@@ -24,7 +24,9 @@ import {
   taskStatus,
 } from "@/lib/schedule-data";
 import {
+  addStream,
   deleteSchedule,
+  deleteStream,
   exportPayload,
   getServerState,
   getStoreState,
@@ -358,9 +360,30 @@ export function SchedulerApp() {
               taskCountByStream={taskCountByStream}
               onChangeRootLabel={updateRootLabel}
               onChangeStream={updateStream}
+              onAddStream={() => {
+                const stream = addStream();
+                setNotice(`「${stream.title}」을 추가했습니다. 이름을 바꾼 뒤 저장해 두세요.`);
+                return stream;
+              }}
+              onDeleteStream={(id) => {
+                const stream = streams.find((s) => s.id === id);
+                const removedTasks = taskCountByStream[id] ?? 0;
+                if (!deleteStream(id)) {
+                  setNotice("영역은 하나 이상 남아 있어야 합니다.");
+                  return;
+                }
+                if (selectedStreamId === id) setSelectedNodeId(null);
+                const selected = tasks.find((t) => t.id === selectedTaskId);
+                if (selected?.streamId === id) setSelectedTaskId(null);
+                setNotice(
+                  removedTasks > 0
+                    ? `「${stream?.title ?? "영역"}」과 업무 ${removedTasks}건을 삭제했습니다.`
+                    : `「${stream?.title ?? "영역"}」을 삭제했습니다.`,
+                );
+              }}
               onResetNames={() => {
                 resetStreamNames();
-                setNotice("영역 이름과 색을 기본값으로 되돌렸습니다.");
+                setNotice("원래 영역의 이름과 색을 기본값으로 되돌렸습니다.");
               }}
             />
           ) : null}
@@ -406,6 +429,7 @@ export function SchedulerApp() {
                 selectedTaskId={selectedTaskId}
                 onSelectTask={setSelectedTaskId}
                 onCycleCell={cycleCell}
+                showEmptyStreams={!selectedStreamId && !thisWeekOnly}
                 emptyMessage={
                   thisWeekOnly
                     ? "이번 주에 잡혀 있는 업무가 없습니다."
