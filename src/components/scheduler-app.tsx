@@ -5,7 +5,7 @@ import { RotateCcw, X } from "lucide-react";
 
 import { MindMap } from "@/components/mind-map";
 import { ScheduleTable } from "@/components/schedule-table";
-import { TaskDetailSheet } from "@/components/task-detail-sheet";
+import { TaskDetailPanel } from "@/components/task-detail-panel";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -192,9 +192,35 @@ export function SchedulerApp() {
                 }
               }}
             />
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                size="sm"
+                variant={!selectedNodeId || selectedNodeId === "root" ? "default" : "outline"}
+                data-testid="filter-all"
+                onClick={() => setSelectedNodeId(null)}
+              >
+                전체
+              </Button>
+              {STREAMS.map((stream) => (
+                <Button
+                  key={stream.id}
+                  size="sm"
+                  variant={selectedNodeId === `stream-${stream.id}` ? "default" : "outline"}
+                  data-testid={`filter-${stream.id}`}
+                  onClick={() => setSelectedNodeId(`stream-${stream.id}`)}
+                  style={
+                    selectedNodeId === `stream-${stream.id}`
+                      ? { backgroundColor: stream.color, borderColor: stream.color, color: "white" }
+                      : { borderColor: stream.color, color: stream.color }
+                  }
+                >
+                  {stream.shortTitle}
+                </Button>
+              ))}
+            </div>
           </section>
 
-          <section className="grid gap-3 lg:grid-cols-[1fr_280px]">
+          <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-sm font-semibold">주간 스케줄 테이블 · 8월–12월</h2>
@@ -202,6 +228,7 @@ export function SchedulerApp() {
                   <Button
                     size="sm"
                     variant={thisWeekOnly ? "default" : "outline"}
+                    data-testid="this-week-only"
                     onClick={() => setThisWeekOnly((v) => !v)}
                   >
                     이번 주만
@@ -229,7 +256,19 @@ export function SchedulerApp() {
               />
             </div>
 
-            <aside className="rounded-xl border bg-card p-4">
+            <aside className={cn("rounded-xl border bg-card p-4", selectedTask && "order-first lg:order-none")}>
+              {selectedTask ? (
+                <TaskDetailPanel
+                  task={selectedTask}
+                  currentWeek={nowWeek}
+                  onClose={() => setSelectedTaskId(null)}
+                  onChangeNotes={(notes) => patchTask(selectedTask.id, (t) => ({ ...t, notes }))}
+                  onChangeOwner={(owner) => patchTask(selectedTask.id, (t) => ({ ...t, owner }))}
+                  onSetCell={(week, status) => setCell(selectedTask.id, week, status)}
+                  onMarkAll={(status) => markAll(selectedTask.id, status)}
+                />
+              ) : (
+                <>
               <h2 className="text-sm font-semibold">이번 주 보드</h2>
               <p className="mt-1 text-xs text-muted-foreground">
                 {currentWeek ? `${currentWeek.rangeLabel}에 칸이 있는 업무` : "현재 주가 계획 구간 밖입니다."}
@@ -270,21 +309,11 @@ export function SchedulerApp() {
                 <LegendDot color="#0f766e" solid label="완료" />
                 <LegendDot color="#e11d48" solid label="지연" />
               </div>
+                </>
+              )}
             </aside>
           </section>
         </main>
-
-        <TaskDetailSheet
-          task={selectedTask}
-          currentWeek={nowWeek}
-          onOpenChange={(open) => {
-            if (!open) setSelectedTaskId(null);
-          }}
-          onChangeNotes={(notes) => selectedTask && patchTask(selectedTask.id, (t) => ({ ...t, notes }))}
-          onChangeOwner={(owner) => selectedTask && patchTask(selectedTask.id, (t) => ({ ...t, owner }))}
-          onSetCell={(week, status) => selectedTask && setCell(selectedTask.id, week, status)}
-          onMarkAll={(status) => selectedTask && markAll(selectedTask.id, status)}
-        />
       </div>
     </TooltipProvider>
   );

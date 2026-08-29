@@ -33,7 +33,7 @@ function statusClass(status: ReturnType<typeof taskStatus>) {
 function cellStyle(color: string, status: CellStatus, isCurrent: boolean) {
   if (status === "empty") {
     return {
-        className: cn("h-8 w-8 rounded-sm border border-transparent", isCurrent && "bg-amber-50"),
+        className: cn("h-9 w-9 rounded-sm border border-transparent", isCurrent && "bg-amber-50"),
       style: undefined as CSSProperties | undefined,
     };
   }
@@ -46,7 +46,7 @@ function cellStyle(color: string, status: CellStatus, isCurrent: boolean) {
   const m = map[status];
   return {
     className: cn(
-      "h-8 w-8 rounded-sm border border-black/5 text-[10px] font-semibold text-white",
+      "h-9 w-9 rounded-sm border border-black/10 text-[11px] font-semibold text-white",
       m.extra,
       isCurrent && "outline outline-2 outline-amber-400",
     ),
@@ -243,10 +243,12 @@ function StreamRows({
             >
               <button
                 type="button"
+                data-testid={`task-open-${task.id}`}
                 className="block w-full text-left"
                 onClick={() => onSelectTask(task.id)}
               >
-                <div className="font-medium leading-5">{task.title}</div>
+                <div className="font-medium leading-5 underline-offset-2 group-hover:underline">{task.title}</div>
+                <div className="text-[11px] text-muted-foreground">상세 보기</div>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-200">
                   <div className="h-full rounded-full" style={{ width: `${taskProgress(task)}%`, backgroundColor: color }} />
                 </div>
@@ -280,6 +282,7 @@ function StreamRows({
                 >
                   <button
                     type="button"
+                    data-testid={`week-cell-${task.id}-${week.index}`}
                     title={`${task.title} · ${week.rangeLabel} · ${CELL_LABEL[statusCell]} — 클릭하여 변경`}
                     aria-label={`${task.title} ${week.rangeLabel} ${CELL_LABEL[statusCell]}`}
                     className={cn("mx-auto flex items-center justify-center", visual.className)}

@@ -5,7 +5,7 @@ export const STREAMS: Stream[] = [
   { id: "arch", title: "아키텍처 · 설계", shortTitle: "설계", color: "#4338ca", side: "left" },
   { id: "storage", title: "스토리지 엔진", shortTitle: "스토리지", color: "#0f766e", side: "left" },
   { id: "query", title: "쿼리 엔진", shortTitle: "쿼리", color: "#b45309", side: "left" },
-  { id: "txn", title: "트랜잭션 · 동시성", shortTitle: "트랜잭션", color: "#be123c", side: "left" },
+  { id: "txn", title: "트랜잭션 · 동시성", shortTitle: "트랜잭션", color: "#be123c", side: "right" },
   { id: "repl", title: "복제 · HA", shortTitle: "복제", color: "#6d28d9", side: "right" },
   { id: "ops", title: "운영 · 관측", shortTitle: "운영", color: "#0369a1", side: "right" },
   { id: "qa", title: "품질 · 릴리스", shortTitle: "품질", color: "#047857", side: "right" },

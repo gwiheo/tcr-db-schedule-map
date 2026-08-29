@@ -6,6 +6,7 @@ import { Minus, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CELL_LABEL, MIND_TREE, STREAM_MAP, taskProgress, taskStatus } from "@/lib/schedule-data";
 import type { MindNode, Task } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type LaidOut = {
   id: string;
@@ -24,16 +25,17 @@ type LaidOut = {
   side: "left" | "right";
 };
 
-const NODE_H = 34;
+const NODE_H = 36;
 const ROOT_H = 58;
-const V_GAP = 9;
-const H_GAP = 54;
+const V_GAP = 10;
+const BRANCH_GAP = 22;
+const H_GAP = 48;
 
 function textWidth(label: string, depth: number) {
   let w = 0;
-  for (const ch of label) w += ch.charCodeAt(0) > 127 ? 12.2 : 7.1;
-  const pad = depth === 0 ? 36 : 22;
-  return Math.max(depth === 0 ? 168 : 92, Math.ceil(w + pad));
+  for (const ch of label) w += ch.charCodeAt(0) > 127 ? 12.4 : 7.2;
+  const pad = depth === 0 ? 36 : 28;
+  return Math.max(depth === 0 ? 172 : 108, Math.ceil(w + pad));
 }
 
 function subtreeHeight(node: MindNode, collapsed: Set<string>): number {
@@ -48,13 +50,12 @@ function layoutTree(root: MindNode, collapsed: Set<string>): { nodes: LaidOut[];
   const left = (root.children ?? []).filter((c) => STREAM_MAP[c.streamId ?? ""]?.side === "left");
   const right = (root.children ?? []).filter((c) => STREAM_MAP[c.streamId ?? ""]?.side !== "left");
 
-  const leftH = left.reduce((s, n, i) => s + subtreeHeight(n, collapsed) + (i ? V_GAP + 10 : 0), 0);
-  const rightH = right.reduce((s, n, i) => s + subtreeHeight(n, collapsed) + (i ? V_GAP + 10 : 0), 0);
-  const contentH = Math.max(leftH, rightH, 280);
+  const leftH = left.reduce((s, n, i) => s + subtreeHeight(n, collapsed) + (i ? BRANCH_GAP : 0), 0);
+  const rightH = right.reduce((s, n, i) => s + subtreeHeight(n, collapsed) + (i ? BRANCH_GAP : 0), 0);
+  const contentH = Math.max(leftH, rightH, 320);
   const rootW = textWidth(root.label, 0);
-  const originY = 48;
-  const canvasH = contentH + 120;
-  const rootX = 780;
+  const originY = 56;
+  const rootX = 820;
   const rootY = originY + contentH / 2 - ROOT_H / 2;
 
   nodes.push({
@@ -117,17 +118,17 @@ function layoutTree(root: MindNode, collapsed: Set<string>): { nodes: LaidOut[];
   let ly = originY + (contentH - leftH) / 2;
   for (const branch of left) {
     const h = place(branch, "left", 1, rootX - rootW / 2 - H_GAP, ly, root.id);
-    ly += h + V_GAP + 10;
+    ly += h + BRANCH_GAP;
   }
   let ry = originY + (contentH - rightH) / 2;
   for (const branch of right) {
     const h = place(branch, "right", 1, rootX + rootW / 2 + H_GAP, ry, root.id);
-    ry += h + V_GAP + 10;
+    ry += h + BRANCH_GAP;
   }
 
-  const maxX = Math.max(...nodes.map((n) => n.x + n.w)) + 40;
-  const maxY = Math.max(...nodes.map((n) => n.y + n.h)) + 48;
-  return { nodes, width: Math.max(1600, maxX + 40), height: Math.max(canvasH, maxY) };
+  const maxX = Math.max(...nodes.map((n) => n.x + n.w)) + 48;
+  const maxY = Math.max(...nodes.map((n) => n.y + n.h)) + 56;
+  return { nodes, width: Math.max(1680, maxX + 40), height: Math.max(contentH + 120, maxY) };
 }
 
 function linkPath(from: LaidOut, to: LaidOut) {
@@ -154,8 +155,8 @@ type MindMapProps = {
 
 export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: MindMapProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [transform, setTransform] = useState({ x: 0, y: 12, scale: 0.82 });
-  const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
+  const [transform, setTransform] = useState({ x: 0, y: 12, scale: 0.78 });
+  const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
 
   const { nodes, width, height } = useMemo(() => layoutTree(MIND_TREE, collapsed), [collapsed]);
@@ -168,7 +169,7 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
     const scale = Math.min(el.clientWidth / width, (el.clientHeight - 8) / height, 1);
     setTransform({
       x: (el.clientWidth - width * scale) / 2,
-      y: Math.max(8, (el.clientHeight - height * scale) / 2),
+      y: Math.max(12, (el.clientHeight - height * scale) / 2),
       scale,
     });
   }
@@ -185,7 +186,7 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
       setTransform((prev) => {
-        const next = Math.min(1.6, Math.max(0.45, prev.scale * (e.deltaY > 0 ? 0.92 : 1.08)));
+        const next = Math.min(1.7, Math.max(0.4, prev.scale * (e.deltaY > 0 ? 0.92 : 1.08)));
         const k = next / prev.scale;
         return {
           scale: next,
@@ -204,12 +205,15 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest("[data-node]")) return;
-    drag.current = { x: e.clientX, y: e.clientY, tx: transform.x, ty: transform.y };
+    drag.current = { x: e.clientX, y: e.clientY, tx: transform.x, ty: transform.y, moved: false };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent) {
     if (!drag.current) return;
+    if (Math.abs(e.clientX - drag.current.x) + Math.abs(e.clientY - drag.current.y) > 3) {
+      drag.current.moved = true;
+    }
     setTransform({
       scale: transform.scale,
       x: drag.current.tx + (e.clientX - drag.current.x),
@@ -234,7 +238,7 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
           size="icon-sm"
           variant="outline"
           className="bg-white/90"
-          onClick={() => setTransform((t) => ({ ...t, scale: Math.min(1.6, t.scale + 0.1) }))}
+          onClick={() => setTransform((t) => ({ ...t, scale: Math.min(1.7, t.scale + 0.1) }))}
           aria-label="확대"
         >
           <Plus />
@@ -243,7 +247,7 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
           size="icon-sm"
           variant="outline"
           className="bg-white/90"
-          onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.45, t.scale - 0.1) }))}
+          onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.4, t.scale - 0.1) }))}
           aria-label="축소"
         >
           <Minus />
@@ -253,11 +257,11 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
         </Button>
       </div>
       <p className="absolute left-4 top-3 z-10 hidden text-xs text-stone-500 sm:block">
-        드래그로 이동 · 휠 확대 · 노드 클릭 시 아래 일정 필터
+        노드를 눌러 아래 일정을 필터합니다 · 빈 곳은 드래그, 휠은 확대
       </p>
       <div
         ref={viewportRef}
-        className="h-[min(52vh,560px)] w-full cursor-grab touch-none active:cursor-grabbing"
+        className="relative h-[min(58vh,640px)] w-full cursor-grab touch-none overflow-hidden active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={() => {
@@ -267,12 +271,7 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
           drag.current = null;
         }}
       >
-        <svg width="100%" height="100%" className="overflow-visible select-none">
-          <defs>
-            <filter id="nodeShadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="1" stdDeviation="1.2" floodOpacity="0.18" />
-            </filter>
-          </defs>
+        <svg width="100%" height="100%" className="pointer-events-none absolute inset-0 overflow-visible">
           <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.scale})`}>
             {nodes
               .filter((n) => n.parentId)
@@ -295,118 +294,101 @@ export function MindMap({ tasks, selectedId, onSelect, highlightedTaskIds }: Min
                   />
                 );
               })}
-            {nodes.map((n) => {
-              const task = n.taskId ? taskById.get(n.taskId) : undefined;
-              const status = task ? taskStatus(task) : undefined;
-              const selected = selectedId === n.id;
-              const related =
-                highlightedTaskIds.size === 0 ||
-                n.depth === 0 ||
-                (n.taskId
-                  ? highlightedTaskIds.has(n.taskId)
-                  : Boolean(
-                      n.streamId &&
-                        [...highlightedTaskIds].some((id) => taskById.get(id)?.streamId === n.streamId),
-                    ));
-              return (
-                <g
-                  key={n.id}
-                  data-node
-                  transform={`translate(${n.x} ${n.y})`}
-                  className="cursor-pointer"
-                  opacity={related ? 1 : 0.28}
-                  {...(task
-                    ? {
-                        title: `${task.title} · ${CELL_LABEL[status ?? "planned"]} · ${taskProgress(task)}%`,
-                      }
-                    : {})}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelect(selected ? null : n.id);
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    if (n.hasChildren && n.depth > 0) toggle(n.id);
-                  }}
-                >
-                  {n.depth === 0 ? (
-                    <>
-                      <rect
-                        width={n.w}
-                        height={n.h}
-                        rx={n.h / 2}
-                        fill={n.color}
-                        stroke={selected ? "#0f172a" : "white"}
-                        strokeWidth={selected ? 3 : 2}
-                      />
-                      <text
-                        x={n.w / 2}
-                        y={n.h / 2 - 6}
-                        textAnchor="middle"
-                        fill="white"
-                        fontSize={15}
-                        fontWeight={700}
-                      >
-                        {n.label}
-                      </text>
-                      <text x={n.w / 2} y={n.h / 2 + 14} textAnchor="middle" fill="#cbd5e1" fontSize={10}>
-                        2026.08 – 12 · 22주
-                      </text>
-                    </>
-                  ) : (
-                    <>
-                      <rect
-                        width={n.w}
-                        height={n.h}
-                        rx={10}
-                        fill="white"
-                        stroke={selected ? n.color : `${n.color}99`}
-                        strokeWidth={selected ? 2.4 : n.depth === 1 ? 2 : 1.2}
-                        filter="url(#nodeShadow)"
-                      />
-                      <rect width={6} height={n.h} rx={2} fill={n.color} />
-                      <text
-                        x={16}
-                        y={n.h / 2 + 4}
-                        fill="#1c1917"
-                        fontSize={n.depth === 1 ? 12.5 : 11.5}
-                        fontWeight={n.depth === 1 ? 700 : 500}
-                      >
-                        {n.label}
-                      </text>
-                      {status === "done" ? <circle cx={n.w - 12} cy={10} r={4} fill={n.color} /> : null}
-                      {n.hasChildren ? (
-                        <g
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggle(n.id);
-                          }}
-                        >
-                          <circle
-                            cx={n.side === "right" ? n.w : 0}
-                            cy={n.h / 2}
-                            r={7}
-                            fill="white"
-                            stroke={n.color}
-                          />
-                          <text
-                            x={n.side === "right" ? n.w : 0}
-                            y={n.h / 2 + 3.5}
-                            textAnchor="middle"
-                            fontSize={10}
-                            fill={n.color}
-                          >
-                            {n.collapsed ? "+" : "–"}
-                          </text>
-                        </g>
-                      ) : null}
-                    </>
-                  )}
-                </g>
-              );
-            })}
           </g>
         </svg>
+        <div
+          className="absolute top-0 left-0"
+          style={{
+            width,
+            height,
+            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+            transformOrigin: "0 0",
+          }}
+        >
+          {nodes.map((n) => {
+            const task = n.taskId ? taskById.get(n.taskId) : undefined;
+            const status = task ? taskStatus(task) : undefined;
+            const selected = selectedId === n.id;
+            const related =
+              highlightedTaskIds.size === 0 ||
+              n.depth === 0 ||
+              (n.taskId
+                ? highlightedTaskIds.has(n.taskId)
+                : Boolean(
+                    n.streamId &&
+                      [...highlightedTaskIds].some((id) => taskById.get(id)?.streamId === n.streamId),
+                  ));
+            return (
+              <div
+                key={n.id}
+                data-node
+                className="absolute"
+                style={{ left: n.x, top: n.y, width: n.w, height: n.h, opacity: related ? 1 : 0.32 }}
+              >
+                <button
+                  type="button"
+                  data-testid={`mind-node-${n.id}`}
+                  title={
+                    task
+                      ? `${task.title} · ${CELL_LABEL[status ?? "planned"]} · ${taskProgress(task)}%`
+                      : n.label
+                  }
+                  onClick={() => onSelect(selected ? null : n.id)}
+                  className={cn(
+                    "flex h-full w-full items-center overflow-hidden rounded-[10px] border bg-white text-left shadow-sm",
+                    n.depth === 0 && "rounded-full border-2 bg-slate-800 text-white shadow-md",
+                    selected ? "ring-2 ring-offset-1" : "",
+                  )}
+                  style={{
+                    borderColor: n.depth === 0 ? "white" : n.color,
+                    boxShadow: n.depth === 1 ? `inset 6px 0 0 ${n.color}` : undefined,
+                    ["--tw-ring-color" as string]: n.color,
+                  }}
+                >
+                  <span
+                    className={cn(
+                      "w-full truncate px-3 text-[11.5px] font-medium text-stone-900",
+                      n.depth === 0 && "px-2 text-center text-[13px] font-bold text-white",
+                      n.depth === 1 && "pl-4 text-[12.5px] font-bold",
+                    )}
+                  >
+                    {n.label}
+                    {n.depth === 0 ? (
+                      <span className="mt-0.5 block text-[10px] font-normal text-slate-300">
+                        2026.08 – 12 · 22주
+                      </span>
+                    ) : null}
+                  </span>
+                  {status === "done" ? (
+                    <span
+                      className="mr-2 size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: n.color }}
+                    />
+                  ) : null}
+                </button>
+                {n.hasChildren && n.depth > 0 ? (
+                  <button
+                    type="button"
+                    data-node
+                    aria-label={n.collapsed ? "펼치기" : "접기"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggle(n.id);
+                    }}
+                    className="absolute top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center rounded-full border bg-white text-[10px] font-bold"
+                    style={{
+                      borderColor: n.color,
+                      color: n.color,
+                      [n.side === "right" ? "right" : "left"]: -8,
+                    }}
+                  >
+                    {n.collapsed ? "+" : "–"}
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
