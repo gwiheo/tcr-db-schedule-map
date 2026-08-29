@@ -4,13 +4,13 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { RotateCcw, X } from "lucide-react";
 
 import { MindMap } from "@/components/mind-map";
+import { ScheduleLibraryBar } from "@/components/schedule-library";
 import { ScheduleTable } from "@/components/schedule-table";
 import { TaskDetailPanel } from "@/components/task-detail-panel";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
-  BASELINE_TASKS,
   CELL_LABEL,
   MIND_TREE,
   STATUS_LABEL,
@@ -23,17 +23,32 @@ import {
   taskProgress,
   taskStatus,
 } from "@/lib/schedule-data";
-import { clearStoredTasks, commitTasks, getClientError, getClientTasks, getServerTasks, subscribeTasks } from "@/lib/storage";
+import {
+  deleteSchedule,
+  exportPayload,
+  getServerState,
+  getStoreState,
+  importFromJson,
+  loadSchedule,
+  renameSchedule,
+  resetToBaseline,
+  saveActiveSchedule,
+  saveAsNewSchedule,
+  subscribeStore,
+  updateTasks,
+} from "@/lib/storage";
 import type { CellStatus, Task } from "@/lib/types";
 import { currentWeekIndex, WEEKS } from "@/lib/weeks";
 import { cn } from "@/lib/utils";
 
 export function SchedulerApp() {
-  const tasks = useSyncExternalStore(subscribeTasks, getClientTasks, getServerTasks);
-  const error = useSyncExternalStore(subscribeTasks, getClientError, () => null);
+  const store = useSyncExternalStore(subscribeStore, getStoreState, getServerState);
+  const { tasks, snapshots, activeName, dirty, error } = store;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [thisWeekOnly, setThisWeekOnly] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saveAsHint, setSaveAsHint] = useState(false);
   const nowWeek = currentWeekIndex();
 
   const selectedNode = selectedNodeId ? findNode(MIND_TREE, selectedNodeId) : null;
@@ -81,7 +96,7 @@ export function SchedulerApp() {
   const activeStream = selectedStreamId ? STREAM_MAP[selectedStreamId] : null;
 
   function patchTask(id: string, updater: (task: Task) => Task) {
-    commitTasks(tasks.map((t) => (t.id === id ? updater(t) : t)));
+    updateTasks(tasks.map((t) => (t.id === id ? updater(t) : t)));
   }
 
   function cycleCell(taskId: string, week: number) {
@@ -111,10 +126,55 @@ export function SchedulerApp() {
   }
 
   function resetPlan() {
-    clearStoredTasks();
-    commitTasks(structuredClone(BASELINE_TASKS));
+    resetToBaseline();
     setSelectedNodeId(null);
     setSelectedTaskId(null);
+    setNotice("기본 계획으로 되돌렸습니다. 저장된 스케줄은 그대로 남아 있습니다.");
+  }
+
+  function handleSave() {
+    if (saveActiveSchedule()) {
+      setSaveAsHint(false);
+      setNotice(`「${activeName}」에 저장했습니다.`);
+      return;
+    }
+    setSaveAsHint(true);
+    setNotice("아직 이름이 없습니다. 「다른 이름으로 저장」으로 이름을 정해 주세요.");
+  }
+
+  function handleSaveAs(name: string) {
+    const snapshot = saveAsNewSchedule(name);
+    setSaveAsHint(false);
+    setNotice(`「${snapshot.name}」(으)로 저장했습니다.`);
+  }
+
+  function handleLoad(id: string) {
+    const snapshot = snapshots.find((s) => s.id === id);
+    if (dirty && !window.confirm("저장하지 않은 변경이 있습니다. 불러오면 지금 화면의 변경은 사라집니다. 계속할까요?")) {
+      return;
+    }
+    if (loadSchedule(id)) {
+      setSelectedTaskId(null);
+      setNotice(`「${snapshot?.name}」을 불러왔습니다.`);
+    }
+  }
+
+  function handleExport(id?: string) {
+    const payload = exportPayload(id);
+    if (!payload) return;
+    const url = URL.createObjectURL(new Blob([payload.json], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = payload.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(`${payload.filename} 파일로 내려받았습니다.`);
+  }
+
+  async function handleImportFile(file: File) {
+    const text = await file.text();
+    const result = importFromJson(text);
+    setNotice(result.error ?? `${result.added}개 스케줄을 목록에 추가했습니다.`);
   }
 
   const detail = selectedTask ? (
@@ -179,6 +239,31 @@ export function SchedulerApp() {
         <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-4 py-4 sm:px-6">
           {error ? (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error}</div>
+          ) : null}
+
+          <ScheduleLibraryBar
+            activeName={activeName}
+            dirty={dirty}
+            snapshots={snapshots}
+            highlightSaveAs={saveAsHint}
+            onSave={handleSave}
+            onSaveAs={handleSaveAs}
+            onLoad={handleLoad}
+            onRename={renameSchedule}
+            onDelete={deleteSchedule}
+            onExport={handleExport}
+            onImportFile={handleImportFile}
+          />
+          {notice ? (
+            <div
+              data-testid="notice"
+              className="flex items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900"
+            >
+              <span>{notice}</span>
+              <Button size="sm" variant="ghost" onClick={() => setNotice(null)} aria-label="알림 닫기">
+                <X />
+              </Button>
+            </div>
           ) : null}
 
           <section className="flex flex-col gap-2">

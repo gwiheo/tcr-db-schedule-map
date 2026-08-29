@@ -48,4 +48,28 @@ export type MindNode = {
 export type PersistedState = {
   version: 1;
   tasks: Task[];
+  activeId?: string | null;
+  activeName?: string | null;
+  dirty?: boolean;
+};
+
+export type SavedSchedule = {
+  id: string;
+  name: string;
+  savedAt: string;
+  tasks: Task[];
+};
+
+export type ScheduleLibrary = {
+  version: 1;
+  snapshots: SavedSchedule[];
+};
+
+export type StoreState = {
+  tasks: Task[];
+  activeId: string | null;
+  activeName: string | null;
+  dirty: boolean;
+  snapshots: SavedSchedule[];
+  error: string | null;
 };
