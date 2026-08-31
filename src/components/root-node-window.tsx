@@ -15,11 +15,6 @@ type RootNodeWindowProps = {
 
 export function RootNodeWindow({ open, label, notes, onChangeNotes, onClose }: RootNodeWindowProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -27,14 +22,14 @@ export function RootNodeWindow({ open, label, notes, onChangeNotes, onClose }: R
       textareaRef.current?.focus();
     });
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCloseRef.current();
+      if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, onClose]);
 
   if (!open) return null;
 

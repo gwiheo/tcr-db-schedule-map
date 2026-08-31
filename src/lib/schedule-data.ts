@@ -1,6 +1,9 @@
 import type { CellStatus, Milestone, MindNode, Stream, Task, TaskStatus } from "./types";
 import { currentWeekIndex, WEEKS } from "./weeks";
 
+/** Snapshot date the baseline plan was written against, so SSR and the client seed the same cells. */
+export const BASELINE_AS_OF_WEEK = currentWeekIndex(new Date(2026, 7, 31));
+
 export const BASELINE_STREAMS: Stream[] = [
   { id: "arch", title: "아키텍처 · 설계", shortTitle: "설계", color: "#4338ca", side: "left" },
   { id: "storage", title: "스토리지 엔진", shortTitle: "스토리지", color: "#0f766e", side: "left" },
@@ -21,7 +24,7 @@ export function seedWeekStatus(
   startWeek: number,
   endWeek: number,
   overall: TaskStatus,
-  nowWeek = currentWeekIndex(),
+  nowWeek = BASELINE_AS_OF_WEEK,
 ): Record<number, CellStatus> {
   const rec: Record<number, CellStatus> = {};
   for (let i = startWeek; i <= endWeek; i++) {

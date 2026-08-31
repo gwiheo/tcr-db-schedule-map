@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { Pencil, RotateCcw, X } from "lucide-react";
 
 import { MindMap } from "@/components/mind-map";
@@ -60,6 +60,7 @@ export function SchedulerApp() {
   const [saveAsHint, setSaveAsHint] = useState(false);
   const [namesOpen, setNamesOpen] = useState(false);
   const [rootWindowOpen, setRootWindowOpen] = useState(false);
+  const closeRootWindow = useCallback(() => setRootWindowOpen(false), []);
   const nowWeek = currentWeekIndex();
 
   const mindTree = useMemo(() => buildMindTree(streams, tasks, rootLabel), [streams, tasks, rootLabel]);
@@ -347,7 +348,7 @@ export function SchedulerApp() {
               label={rootLabel}
               notes={rootNotes}
               onChangeNotes={updateRootNotes}
-              onClose={() => setRootWindowOpen(false)}
+              onClose={closeRootWindow}
             />
             <div className="flex flex-wrap gap-1.5">
               <button
